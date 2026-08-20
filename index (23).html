@@ -1,0 +1,1596 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal de Cuadrantes Bauhaus</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // Hace que las clases "dark:" dependan de la clase 'dark' en <html>
+        // (controlada por el interruptor de la propia app) en vez de depender
+        // del modo oscuro del sistema operativo/navegador del usuario.
+        tailwind.config = { darkMode: 'class' };
+    </script>
+    <!-- React y ReactDOM -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <!-- SheetJS para lectura de XLSX -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        /* Desplazamiento suave para toda la página */
+        html {
+            scroll-behavior: smooth;
+        }
+        /* Desactivar resaltado azul genérico al tocar en móviles */
+        button, div {
+            -webkit-tap-highlight-color: transparent;
+        }
+    </style>
+</head>
+<body class="antialiased font-sans">
+    <div id="root"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+        // Configuración de Firebase del proyecto "calendarios-c2504"
+        const firebaseConfig = {
+          apiKey: "AIzaSyDx33vk8l2ywFvxWANT-50y6MOiCFvaprg",
+          authDomain: "calendarios-c2504.firebaseapp.com",
+          projectId: "calendarios-c2504",
+          storageBucket: "calendarios-c2504.firebasestorage.app",
+          messagingSenderId: "138275814283",
+          appId: "1:138275814283:web:4e991bb030e85c5d770d8e",
+          measurementId: "G-544LQLVLMC"
+        };
+
+        const firebaseApp = initializeApp(firebaseConfig);
+        const auth = getAuth(firebaseApp);
+        const db = getFirestore(firebaseApp);
+        // Documento único donde se guarda todo el estado compartido del portal
+        const ESTADO_DOC_REF = doc(db, 'portal', 'estado');
+
+        const { createElement: h, useState, useRef, useEffect } = React;
+
+        const IconUpload = () => h('svg', { xmlns: 'http://www.w3.org/2000/svg', width: '20', height: '20', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }, h('path', { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' }), h('polyline', { points: '17 8 12 3 7 8' }), h('line', { x1: '12', y1: '3', x2: '12', y2: '15' }));
+        const IconDownload = () => h('svg', { xmlns: 'http://www.w3.org/2000/svg', width: '18', height: '18', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }, h('path', { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' }), h('polyline', { points: '7 10 12 15 17 10' }), h('line', { x1: '12', y1: '15', x2: '12', y2: '3' }));
+        const IconCalendar = () => h('svg', { xmlns: 'http://www.w3.org/2000/svg', width: '18', height: '18', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }, h('rect', { width: '18', height: '18', x: '3', y: '4', rx: '2', ry: '2' }), h('line', { x1: '16', y1: '2', x2: '16', y2: '6' }), h('line', { x1: '8', y1: '2', x2: '8', y2: '6' }), h('line', { x1: '3', y1: '10', x2: '21', y2: '10' }));
+        const IconUsers = () => h('svg', { xmlns: 'http://www.w3.org/2000/svg', width: '24', height: '24', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }, h('path', { d: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2' }), h('circle', { cx: '9', cy: '7', r: '4' }), h('path', { d: 'M22 21v-2a4 4 0 0 0-3-3.87' }), h('path', { d: 'M16 3.13a4 4 0 0 1 0 7.75' }));
+        const IconBriefcase = () => h('svg', { xmlns: 'http://www.w3.org/2000/svg', width: '24', height: '24', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }, h('rect', { width: '20', height: '14', x: '2', y: '7', rx: '2', ry: '2' }), h('path', { d: 'M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16' }));
+        const IconFileText = () => h('svg', { xmlns: 'http://www.w3.org/2000/svg', width: '20', height: '20', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }, h('path', { d: 'M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z' }), h('polyline', { points: '14 2 14 8 20 8' }), h('line', { x1: '16', y1: '13', x2: '8', y2: '13' }), h('line', { x1: '16', y1: '17', x2: '8', y2: '17' }), h('line', { x1: '10', y1: '9', x2: '8', y2: '9' }));
+        const IconChevronRight = ({ size = 18, className = "" }) => h('svg', { xmlns: 'http://www.w3.org/2000/svg', width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round', className }, h('polyline', { points: '9 18 15 12 9 6' }));
+        const IconLogOut = () => h('svg', { xmlns: 'http://www.w3.org/2000/svg', width: '18', height: '18', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }, h('path', { d: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4' }), h('polyline', { points: '16 17 21 12 16 7' }), h('line', { x1: '21', y1: '12', x2: '9', y2: '12' }));
+        const IconSearch = () => h('svg', { xmlns: 'http://www.w3.org/2000/svg', width: '20', height: '20', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }, h('circle', { cx: '11', cy: '11', r: '8' }), h('line', { x1: '21', y1: '21', x2: '16.65', y2: '16.65' }));
+        const IconClock = () => h('svg', { xmlns: 'http://www.w3.org/2000/svg', width: '14', height: '14', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }, h('circle', { cx: '12', cy: '12', r: '10' }), h('polyline', { points: '12 6 12 12 16 14' }));
+        const IconHome = () => h('svg', { xmlns: 'http://www.w3.org/2000/svg', width: '24', height: '24', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }, h('path', { d: 'm3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z' }), h('polyline', { points: '9 22 9 12 15 12 15 22' }));
+        const IconTrash2 = () => h('svg', { xmlns: 'http://www.w3.org/2000/svg', width: '18', height: '18', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }, h('polyline', { points: '3 6 5 6 21 6' }), h('path', { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' }), h('line', { x1: '10', y1: '11', x2: '10', y2: '17' }), h('line', { x1: '14', y1: '11', x2: '14', y2: '17' }));
+        const IconLock = () => h('svg', { xmlns: 'http://www.w3.org/2000/svg', width: '24', height: '24', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }, h('rect', { width: '18', height: '11', x: '3', y: '11', rx: '2', ry: '2' }), h('path', { d: 'M7 11V7a5 5 0 0 1 10 0v4' }));
+        const IconShield = () => h('svg', { xmlns: 'http://www.w3.org/2000/svg', width: '24', height: '24', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }, h('path', { d: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z' }));
+        const IconKey = () => h('svg', { xmlns: 'http://www.w3.org/2000/svg', width: '18', height: '18', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }, h('path', { d: 'm21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.778-7.778zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4' }));
+        const IconMoon = () => h('svg', { xmlns: 'http://www.w3.org/2000/svg', width: '18', height: '18', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }, h('path', { d: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z' }));
+        const IconSun = () => h('svg', { xmlns: 'http://www.w3.org/2000/svg', width: '18', height: '18', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }, h('circle', { cx: '12', cy: '12', r: '5' }), h('line', { x1: '12', y1: '1', x2: '12', y2: '3' }), h('line', { x1: '12', y1: '21', x2: '12', y2: '23' }), h('line', { x1: '4.22', y1: '4.22', x2: '5.64', y2: '5.64' }), h('line', { x1: '18.36', y1: '18.36', x2: '19.78', y2: '19.78' }), h('line', { x1: '1', y1: '12', x2: '3', y2: '12' }), h('line', { x1: '21', y1: '12', x2: '23', y2: '12' }), h('line', { x1: '4.22', y1: '19.78', x2: '5.64', y2: '18.36' }), h('line', { x1: '18.36', y1: '5.64', x2: '19.78', y2: '4.22' }));
+
+        const CATEGORIAS = [
+          'Pinturas', 'Maderas', 'Ferretería', 'Maquinaria', 
+          'Electricidad', 'Sanitarios', 'Jardín', 'Proyectos', 
+          'Ordenación', 'Cajas', 'Mercancías'
+        ];
+
+        const TURNOS_COMPLETOS_OFICIALES = {
+          'D': 'DESCANSO',
+          'V': 'DÍA VACACIONES',
+          'B': 'DÍA BAJA',
+          'M1': 'MAÑANA 6:20 - 13:15',
+          'M2': 'MAÑANA 6:55 - 13:10',
+          'M3': 'MAÑANA 7:30 - 13:45',
+          'M4': 'MAÑANA 7:45 - 14:30',
+          'M5': 'MAÑANA 7:45 - 15:00',
+          'M6': 'MAÑANA 7:50 - 15:05',
+          'M7': 'MAÑANA 8:50 - 15:05',
+          'M8': 'MAÑANA 8:50 - 16:10',
+          'M9': 'MAÑANA 10:00 - 15:00',
+          'M10': 'MAÑANA 06:30 - 13:25',
+          'M11': 'MAÑANA 10:55 - 15:10',
+          'M12': 'MAÑANA 09:30 - 16:00',
+          'M13': 'MAÑANA 07:00 - 15:00',
+          'M14': 'MAÑANA 07:00 - 15:30',
+          'M15': 'MAÑANA 07:00 - 16:00',
+          'M16': 'MAÑANA 07:00 - 13:45',
+          'M17': 'MAÑANA 07:00 - 10:45',
+          'M18': 'MAÑANA 07:00 - 10:00',
+          'M19': 'MAÑANA 07:00 - 12:00',
+          'M20': 'MAÑANA 09:10 - 15:10',
+          'M21': 'MAÑANA 09:30 - 15:45',
+          'M22': 'MAÑANA 09:30 - 15:45',
+          'M23': 'MAÑANA 08:30 - 14:30',
+          'M24': 'MAÑANA 08:30 - 16:00',
+          'M25': 'MAÑANA 06:30 - 09:30',
+          'M26': 'MAÑANA 06:30 - 11:45',
+          'M27': 'MAÑANA 06:30 - 11:15',
+          'N1': 'NOCHE 21:00 - 06:00',
+          'P1': 'PARTIDO 08:50 - 19:35',
+          'P3': 'PARTIDO 09:50 - 19:35',
+          'P4': 'PARTIDO 09:50 - 20:05',
+          'P5': 'PARTIDO 09:55 - 20:10',
+          'P6': 'PARTIDO 10:25 - 21:10',
+          'P7': 'PARTIDO 11:25 - 21:10',
+          'P8': 'PARTIDO 11:45 - 21:00',
+          'P9': 'PARTIDO 08:00 - 18:00',
+          'P20': 'PARTIDO 09:00 - 19:00',
+          'T1': 'TARDE 13:45 - 21:00',
+          'T2': 'TARDE 14:15 - 21:00',
+          'T3': 'TARDE 14:55 - 21:10',
+          'T4': 'TARDE 15:50 - 20:00',
+          'T5': 'TARDE 16:00 - 21:00',
+          'T6': 'TARDE 16:55 - 21:10',
+          'T7': 'TARDE 14:15 - 21:10',
+          'T9': 'TARDE 16:00 - 20:00',
+          'T10': 'TARDE 13:30 - 21:00',
+          'T11': 'TARDE 13:30 - 21:30',
+          'T12': 'TARDE 16:00 - 21:10',
+          'T13': 'TARDE 13:45 - 21:00',
+          'T14': 'TARDE 15:05 - 21:10',
+          'T15': 'TARDE 13:10 - 21:10',
+          'T16': 'TARDE 13:55 - 21:10',
+          'T17': 'TARDE 13:45 - 21:00',
+          'T18': 'TARDE 13:00 - 21:00'
+        };
+
+        // Extraer formato "HH:MM - HH:MM" de los strings oficiales
+        const extractTime = (desc) => {
+            if (!desc) return '';
+            const match = desc.match(/\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}/);
+            return match ? match[0] : '';
+        };
+
+        // Formatear tiempos para los inputs type="time"
+        const padTime = (t) => {
+            if (!t) return '';
+            const parts = t.split(':');
+            if (parts.length === 2) {
+                return `${parts[0].padStart(2, '0')}:${parts[1]}`;
+            }
+            return t;
+        };
+
+        const parseTimeRange = (timeStr) => {
+            if (!timeStr) return { from: '', to: '' };
+            const parts = timeStr.split('-');
+            if (parts.length === 2) {
+                return {
+                    from: padTime(parts[0].trim()),
+                    to: padTime(parts[1].trim())
+                };
+            }
+            return { from: '', to: '' };
+        };
+
+        // Calcular la duración en horas de un turno concreto
+        const calculateShiftHours = (shiftObj) => {
+            if (!shiftObj || !shiftObj.code || ['D', 'V', 'B'].includes(shiftObj.code)) return 0;
+            const timeStr = shiftObj.time || extractTime(TURNOS_COMPLETOS_OFICIALES[shiftObj.code]);
+            if (!timeStr) return 0;
+            const { from, to } = parseTimeRange(timeStr);
+            if (!from || !to) return 0;
+            
+            const [h1, m1] = from.split(':').map(Number);
+            const [h2, m2] = to.split(':').map(Number);
+            if (isNaN(h1) || isNaN(m1) || isNaN(h2) || isNaN(m2)) return 0;
+            
+            let startMin = h1 * 60 + m1;
+            let endMin = h2 * 60 + m2;
+            if (endMin <= startMin) {
+                endMin += 24 * 60; // Caso de turno nocturno
+            }
+            return (endMin - startMin) / 60;
+        };
+
+        // Calcular acumulados de horas (mensuales y semanales) y contadores de días especiales (D, V, B)
+        const calculateEmployeeStats = (empShifts, weekdays) => {
+            let totalMonthHours = 0;
+            let countD = 0;
+            let countV = 0;
+            let countB = 0;
+            const weeklyHours = [];
+            let currentWeekHours = 0;
+
+            empShifts.forEach((shiftObj, idx) => {
+                const code = shiftObj?.code || '';
+                if (code === 'D') countD++;
+                else if (code === 'V') countV++;
+                else if (code === 'B') countB++;
+
+                const hrs = calculateShiftHours(shiftObj);
+                totalMonthHours += hrs;
+
+                const wd = weekdays[idx] || '';
+                if (wd === 'L' && idx > 0) {
+                    weeklyHours.push(currentWeekHours);
+                    currentWeekHours = 0;
+                }
+                currentWeekHours += hrs;
+            });
+            weeklyHours.push(currentWeekHours);
+
+            return {
+                totalMonthHours,
+                weeklyHours,
+                countD,
+                countV,
+                countB
+            };
+        };
+
+        const initialMap = (shiftsArray) => shiftsArray.map(code => ({
+            code,
+            time: extractTime(TURNOS_COMPLETOS_OFICIALES[code]),
+            isModified: false
+        }));
+
+        const DATOS_INICIALES = [
+          {
+            id: 'demo-1',
+            category: 'Pinturas',
+            monthName: 'ENERO 2026',
+            weekdays: ['J', 'V', 'S', 'D', 'L', 'M', 'M', 'J', 'V', 'S', 'D', 'L', 'M', 'M', 'J', 'V', 'S', 'D', 'L', 'M', 'M', 'J', 'V', 'S', 'D', 'L', 'M', 'M', 'J', 'V', 'S'],
+            legend: TURNOS_COMPLETOS_OFICIALES,
+            employees: [
+              {
+                name: 'GONZALEZ GARCIA ORIOL',
+                shifts: initialMap(['D', 'M23', 'M13', 'D', 'T14', 'D', 'T15', 'T15', 'T15', 'D', 'D', 'M20', 'D', 'M23', 'M24', 'M23', 'M13', 'D', 'T14', 'T15', 'T15', 'T15', 'T15', 'T2', 'D', 'M20', 'M24', 'M24', 'M24', 'M24', 'D'])
+              },
+              {
+                name: 'MARTINEZ PEREZ CARLOS',
+                shifts: initialMap(['M23', 'D', 'T14', 'T15', 'D', 'M20', 'M24', 'D', 'T15', 'T15', 'M20', 'D', 'M23', 'M24', 'D', 'T14', 'T15', 'T15', 'D', 'M20', 'M24', 'M24', 'D', 'T2', 'M20', 'D', 'M24', 'M24', 'D', 'M24', 'D'])
+              }
+            ]
+          }
+        ];
+
+        const parseCSV = (csvText, category) => {
+          const lines = csvText.split('\n').map(l => l.split(','));
+          const monthlySchedules = [];
+          let globalLegend = { ...TURNOS_COMPLETOS_OFICIALES };
+
+          for (let i = 0; i < lines.length; i++) {
+            if (lines[i][1] === '1' && lines[i][2] === '2') {
+              const daysRowIdx = i;
+              let monthName = "MES DESCONOCIDO";
+              
+              const possibleMonth = lines[i].find(cell => cell && isNaN(parseInt(cell)) && cell.trim() !== '');
+              if (possibleMonth) monthName = possibleMonth.trim();
+
+              const weekdays = lines[daysRowIdx + 1].slice(1, 32).map(w => w ? w.trim() : '');
+              const employees = [];
+
+              let empIdx = daysRowIdx + 2;
+              while (empIdx < lines.length && lines[empIdx] && lines[empIdx][0] && lines[empIdx][0].trim() !== '') {
+                const name = lines[empIdx][0].trim();
+                const shifts = lines[empIdx].slice(1, 32).map(s => {
+                    const code = s ? s.trim() : '';
+                    return {
+                        code,
+                        time: extractTime(TURNOS_COMPLETOS_OFICIALES[code]),
+                        isModified: false
+                    };
+                });
+                
+                if (name.length > 2 && !name.includes('DIA') && !name.includes('MAÑANA') && !name.includes('H.NO')) {
+                  if (!employees.some(e => e.name === name)) {
+                    employees.push({ name, shifts });
+                  }
+                }
+                empIdx++;
+              }
+
+              if (employees.length > 0) {
+                monthlySchedules.push({
+                  id: `${Date.now()}-${monthName}-${Math.random()}`,
+                  category,
+                  monthName,
+                  weekdays,
+                  employees,
+                  legend: globalLegend
+                });
+              }
+            }
+          }
+
+          return monthlySchedules;
+        };
+
+        function getShiftBadgeStyle(shiftCode) {
+          if (!shiftCode || shiftCode === 'D') return 'bg-red-500 text-white border border-black dark:border-white';
+          if (shiftCode === 'V') return 'bg-blue-800 text-white border border-black dark:border-white';
+          if (shiftCode === 'B') return 'bg-slate-500 text-white border border-black dark:border-white';
+          if (shiftCode.startsWith('M')) return 'bg-green-400 text-black font-black border border-black';
+          if (shiftCode.startsWith('T')) return 'bg-yellow-300 text-black font-black border border-black';
+          if (shiftCode.startsWith('P')) return 'bg-cyan-400 text-black font-black border border-black';
+          if (shiftCode.startsWith('N')) return 'bg-purple-600 text-white border border-black dark:border-white';
+          return 'bg-gray-200 text-black border border-black';
+        }
+
+        function App() {
+          const [currentView, setCurrentView] = useState('login'); 
+          const [schedules, setSchedules] = useState(DATOS_INICIALES);
+          const [selectedCategory, setSelectedCategory] = useState('');
+          const [selectedEmployeeName, setSelectedEmployeeName] = useState('');
+          const [selectedMonth, setSelectedMonth] = useState('');
+          const [notifications, setNotifications] = useState({}); 
+          const [employeePasswords, setEmployeePasswords] = useState({});
+          const [darkMode, setDarkMode] = useState(false);
+          const [cloudReady, setCloudReady] = useState(false);
+          const [cloudError, setCloudError] = useState('');
+          const dataLoadedRef = useRef(false);
+          const isRemoteUpdateRef = useRef(false);
+
+          // 1) Autenticación anónima + suscripción en tiempo real al documento compartido
+          useEffect(() => {
+            let unsubscribeSnapshot = null;
+
+            signInAnonymously(auth).catch((err) => {
+              console.error('Error de autenticación Firebase:', err);
+              setCloudError('No se pudo conectar con la base de datos.');
+            });
+
+            const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+              if (!user) return;
+              unsubscribeSnapshot = onSnapshot(ESTADO_DOC_REF, (snap) => {
+                isRemoteUpdateRef.current = true;
+                if (snap.exists()) {
+                  const data = snap.data();
+                  setSchedules(data.schedules && data.schedules.length ? data.schedules : DATOS_INICIALES);
+                  setNotifications(data.notifications || {});
+                  setEmployeePasswords(data.employeePasswords || {});
+                } else {
+                  setDoc(ESTADO_DOC_REF, { schedules: DATOS_INICIALES, notifications: {}, employeePasswords: {} });
+                }
+                dataLoadedRef.current = true;
+                setCloudReady(true);
+              }, (err) => {
+                console.error('Error leyendo Firestore:', err);
+                setCloudError('No se pudo sincronizar con la nube.');
+              });
+            });
+
+            return () => {
+              unsubscribeAuth();
+              if (unsubscribeSnapshot) unsubscribeSnapshot();
+            };
+          }, []);
+
+          // 2) Cada cambio local (subidas, ediciones, notificaciones, contraseñas) se guarda en Firestore
+          useEffect(() => {
+            if (!dataLoadedRef.current) return;
+            if (isRemoteUpdateRef.current) { isRemoteUpdateRef.current = false; return; }
+            setDoc(ESTADO_DOC_REF, { schedules, notifications, employeePasswords }, { merge: true })
+              .catch((err) => {
+                console.error('Error guardando en Firestore:', err);
+                setCloudError('No se pudieron guardar los cambios en la nube.');
+              });
+          }, [schedules, notifications, employeePasswords]);
+
+          // 3) Sincroniza la clase 'dark' de <html> con el interruptor de la app,
+          // para que las clases "dark:" de Tailwind dependan de este estado
+          // y no del modo oscuro del sistema operativo/navegador.
+          useEffect(() => {
+            document.documentElement.classList.toggle('dark', darkMode);
+          }, [darkMode]);
+
+          const toggleDarkMode = () => setDarkMode(!darkMode);
+
+          const themeClasses = darkMode ? 'bg-zinc-950 text-zinc-100' : 'bg-white text-black';
+          const cardClasses = darkMode ? 'bg-zinc-900 border-2 border-zinc-100 shadow-[6px_6px_0px_0px_rgba(255,255,255,1)] text-zinc-100' : 'bg-white border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-black';
+          const inputClasses = darkMode ? 'border-2 border-zinc-100 bg-zinc-800 text-zinc-100 p-3 font-bold text-sm focus:outline-none focus:bg-zinc-700' : 'border-2 border-black bg-white text-black p-3 font-bold text-sm focus:outline-none focus:bg-red-50';
+          const selectClasses = darkMode ? 'border-2 border-zinc-100 bg-zinc-800 text-zinc-100 p-2.5 font-bold cursor-pointer text-xs uppercase focus:outline-none' : 'border-2 border-black bg-white text-black p-2.5 font-bold cursor-pointer text-xs uppercase focus:outline-none';
+
+          if (currentView === 'login') {
+            return h('div', { className: `min-h-screen ${themeClasses} flex items-center justify-center p-4 transition-colors` },
+              h('div', { className: 'absolute top-4 right-4 flex flex-col items-end gap-2' },
+                h('button', { 
+                  onClick: toggleDarkMode,
+                  className: `p-2.5 border-2 ${darkMode ? 'border-white bg-zinc-800 text-yellow-400' : 'border-black bg-white text-black'} font-black flex items-center gap-2 uppercase text-xs cursor-pointer shadow-[3px_3px_0px_0px_currentColor]`
+                }, darkMode ? h(IconSun) : h(IconMoon), darkMode ? 'Modo Claro' : 'Modo Oscuro'),
+                cloudError && h('span', { className: 'text-[10px] font-black uppercase text-[#E30613] bg-white px-2 py-1 border border-[#E30613]' }, cloudError),
+                !cloudError && !cloudReady && h('span', { className: 'text-[10px] font-black uppercase opacity-60' }, 'Conectando con la nube…')
+              ),
+              h('div', { className: `max-w-md w-full rounded-none overflow-hidden ${cardClasses}` },
+                h('div', { className: 'bg-[#E30613] p-6 sm:p-8 text-center border-b-4 border-current' },
+                  h('h1', { className: 'text-3xl sm:text-4xl font-black text-white mb-1 tracking-wider uppercase' }, 'BAUHAUS'),
+                  h('p', { className: 'text-white text-xs sm:text-sm font-bold uppercase tracking-widest bg-black inline-block px-3 py-1 mt-2 border border-white' }, 'Portal de Cuadrantes')
+                ),
+                h('div', { className: 'p-6 sm:p-8 space-y-4' },
+                  h('button', { 
+                    onClick: () => setCurrentView('employee-select'),
+                    className: `w-full flex items-center justify-between p-4 border-2 transition-all group cursor-pointer ${darkMode ? 'bg-zinc-900 border-zinc-100 hover:bg-zinc-100 hover:text-zinc-950 shadow-[3px_3px_0px_0px_rgba(255,255,255,1)]' : 'bg-white border-black hover:bg-black hover:text-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'}`
+                  },
+                    h('div', { className: 'flex items-center gap-4' },
+                      h('div', { className: 'bg-[#E30613] text-white p-3 border border-current' }, h(IconUsers)),
+                      h('div', { className: 'text-left' },
+                        h('h3', { className: 'font-black text-sm sm:text-base uppercase tracking-tight' }, 'Soy Empleado'),
+                        h('p', { className: 'text-xs opacity-80 font-bold' }, 'Consultar mi horario')
+                      )
+                    ),
+                    h(IconChevronRight)
+                  ),
+                  h('button', { 
+                    onClick: () => setCurrentView('manager-select'),
+                    className: `w-full flex items-center justify-between p-4 border-2 transition-all group cursor-pointer ${darkMode ? 'bg-zinc-900 border-zinc-100 hover:bg-zinc-100 hover:text-zinc-950 shadow-[3px_3px_0px_0px_rgba(255,255,255,1)]' : 'bg-white border-black hover:bg-black hover:text-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'}`
+                  },
+                    h('div', { className: 'flex items-center gap-4' },
+                      h('div', { className: 'bg-[#E30613] text-white p-3 border border-current' }, h(IconShield)),
+                      h('div', { className: 'text-left' },
+                        h('h3', { className: 'font-black text-sm sm:text-base uppercase tracking-tight' }, 'Soy Responsable'),
+                        h('p', { className: 'text-xs opacity-80 font-bold' }, 'Cobertura y publicación')
+                      )
+                    ),
+                    h(IconChevronRight)
+                  ),
+                  h('button', { 
+                    onClick: () => setCurrentView('admin-login'),
+                    className: `w-full flex items-center justify-between p-4 border-2 transition-all group cursor-pointer ${darkMode ? 'bg-zinc-900 border-zinc-100 hover:bg-zinc-100 hover:text-zinc-950 shadow-[3px_3px_0px_0px_rgba(255,255,255,1)]' : 'bg-white border-black hover:bg-black hover:text-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'}`
+                  },
+                    h('div', { className: 'flex items-center gap-4' },
+                      h('div', { className: darkMode ? 'bg-zinc-100 text-zinc-950 p-3 border border-current' : 'bg-black text-[#E30613] p-3 border border-current' }, h(IconBriefcase)),
+                      h('div', { className: 'text-left' },
+                        h('h3', { className: 'font-black text-sm sm:text-base uppercase tracking-tight' }, 'Soy Coordinador'),
+                        h('p', { className: 'text-xs opacity-80 font-bold' }, 'Gestión y subida de turnos')
+                      )
+                    ),
+                    h(IconChevronRight)
+                  )
+                )
+              )
+            );
+          }
+
+          if (currentView === 'admin-login') {
+            return h(AdminLogin, { onLoginSuccess: () => setCurrentView('admin'), onBack: () => setCurrentView('login'), darkMode, toggleDarkMode, themeClasses, cardClasses, inputClasses });
+          }
+
+          if (currentView === 'manager-select') {
+            return h(ManagerLogin, { onLoginSuccess: () => setCurrentView('manager-dashboard'), onBack: () => setCurrentView('login'), darkMode, toggleDarkMode, themeClasses, cardClasses, inputClasses });
+          }
+
+          if (currentView === 'admin') {
+            return h(AdminPortal, { schedules, setSchedules, employeePasswords, setEmployeePasswords, onBack: () => setCurrentView('login'), darkMode, toggleDarkMode, themeClasses, cardClasses, selectClasses });
+          }
+
+          if (currentView === 'manager-dashboard') {
+            return h(ManagerDashboard, { schedules, setSchedules, notifications, setNotifications, onBack: () => setCurrentView('login'), darkMode, toggleDarkMode, themeClasses, cardClasses, selectClasses, inputClasses });
+          }
+
+          return h(EmployeePortal, { 
+            schedules, currentView, setCurrentView, 
+            selectedCategory, setSelectedCategory, 
+            selectedEmployeeName, setSelectedEmployeeName, 
+            selectedMonth, setSelectedMonth, 
+            notifications, setNotifications,
+            employeePasswords, setEmployeePasswords,
+            darkMode, toggleDarkMode, themeClasses, cardClasses, selectClasses,
+            onLogout: () => { setSelectedCategory(''); setSelectedEmployeeName(''); setSelectedMonth(''); setCurrentView('login'); }
+          });
+        }
+
+        function AdminLogin({ onLoginSuccess, onBack, darkMode, toggleDarkMode, themeClasses, cardClasses, inputClasses }) {
+          const [username, setUsername] = useState('');
+          const [password, setPassword] = useState('');
+          const [error, setError] = useState('');
+
+          const handleLogin = (e) => {
+            e.preventDefault();
+            if (username === 'admin' && password === 'bcn807') {
+              onLoginSuccess();
+            } else {
+              setError('Usuario o contraseña incorrectos.');
+            }
+          };
+
+          return h('div', { className: `min-h-screen ${themeClasses} flex items-center justify-center p-4 transition-colors relative` },
+            h('div', { className: 'absolute top-4 right-4' },
+              h('button', { onClick: toggleDarkMode, className: `p-2.5 border-2 ${darkMode ? 'border-white bg-zinc-800 text-yellow-400' : 'border-black bg-white text-black'} font-black flex items-center gap-2 uppercase text-xs cursor-pointer` }, darkMode ? h(IconSun) : h(IconMoon), darkMode ? 'Claro' : 'Oscuro')
+            ),
+            h('div', { className: `max-w-md w-full overflow-hidden ${cardClasses}` },
+              h('div', { className: darkMode ? 'bg-zinc-950 p-6 sm:p-8 text-center border-b-4 border-[#E30613]' : 'bg-black p-6 sm:p-8 text-center border-b-4 border-[#E30613]' },
+                h('div', { className: 'inline-block bg-[#E30613] p-3 text-white mb-2 border border-current' }, h(IconLock)),
+                h('h1', { className: 'text-xl sm:text-2xl font-black text-white uppercase' }, 'Acceso Coordinador'),
+                h('p', { className: 'text-gray-300 text-xs sm:text-sm mt-1 font-bold' }, 'Introduce tus credenciales')
+              ),
+              h('form', { onSubmit: handleLogin, className: 'p-6 sm:p-8 space-y-4' },
+                h('div', null,
+                  h('label', { className: 'block text-xs font-black uppercase tracking-wider mb-1' }, 'Usuario'),
+                  h('input', { type: 'text', value: username, onChange: (e) => setUsername(e.target.value), placeholder: 'admin', className: inputClasses })
+                ),
+                h('div', null,
+                  h('label', { className: 'block text-xs font-black uppercase tracking-wider mb-1' }, 'Contraseña'),
+                  h('input', { type: 'password', value: password, onChange: (e) => setPassword(e.target.value), placeholder: '••••••', className: inputClasses })
+                ),
+                error && h('div', { className: 'p-3 bg-red-100 text-[#E30613] font-black text-xs border-2 border-[#E30613]' }, error),
+                h('div', { className: 'flex gap-3 pt-2' },
+                  h('button', { type: 'button', onClick: onBack, className: `w-1/3 py-3 px-4 font-black border-2 ${darkMode ? 'border-white bg-zinc-800 text-white hover:bg-zinc-700' : 'border-black bg-white text-black hover:bg-gray-200'} uppercase text-xs cursor-pointer` }, 'Volver'),
+                  h('button', { type: 'submit', className: 'w-2/3 py-3 px-4 font-black text-white bg-[#E30613] border-2 border-current hover:bg-red-700 uppercase text-xs cursor-pointer shadow-[3px_3px_0px_0px_currentColor]' }, 'Entrar')
+                )
+              )
+            )
+          );
+        }
+
+        function ManagerLogin({ onLoginSuccess, onBack, darkMode, toggleDarkMode, themeClasses, cardClasses, inputClasses }) {
+          const [username, setUsername] = useState('');
+          const [password, setPassword] = useState('');
+          const [error, setError] = useState('');
+
+          const handleLogin = (e) => {
+            e.preventDefault();
+            if (username === 'responsable' && password === 'resp807') {
+              onLoginSuccess();
+            } else {
+              setError('Usuario o contraseña incorrectos.');
+            }
+          };
+
+          return h('div', { className: `min-h-screen ${themeClasses} flex items-center justify-center p-4 transition-colors relative` },
+            h('div', { className: 'absolute top-4 right-4' },
+              h('button', { onClick: toggleDarkMode, className: `p-2.5 border-2 ${darkMode ? 'border-white bg-zinc-800 text-yellow-400' : 'border-black bg-white text-black'} font-black flex items-center gap-2 uppercase text-xs cursor-pointer` }, darkMode ? h(IconSun) : h(IconMoon), darkMode ? 'Claro' : 'Oscuro')
+            ),
+            h('div', { className: `max-w-md w-full overflow-hidden ${cardClasses}` },
+              h('div', { className: 'bg-[#E30613] p-6 sm:p-8 text-center border-b-4 border-current' },
+                h('div', { className: 'inline-block bg-black p-3 text-white mb-2 border border-white' }, h(IconShield)),
+                h('h1', { className: 'text-xl sm:text-2xl font-black text-white uppercase' }, 'Acceso Responsables'),
+                h('p', { className: 'text-white text-xs sm:text-sm mt-1 font-bold' }, 'Control y publicación de turnos')
+              ),
+              h('form', { onSubmit: handleLogin, className: 'p-6 sm:p-8 space-y-4' },
+                h('div', null,
+                  h('label', { className: 'block text-xs font-black uppercase tracking-wider mb-1' }, 'Usuario'),
+                  h('input', { type: 'text', value: username, onChange: (e) => setUsername(e.target.value), placeholder: 'responsable', className: inputClasses })
+                ),
+                h('div', null,
+                  h('label', { className: 'block text-xs font-black uppercase tracking-wider mb-1' }, 'Contraseña'),
+                  h('input', { type: 'password', value: password, onChange: (e) => setPassword(e.target.value), placeholder: '••••••', className: inputClasses })
+                ),
+                error && h('div', { className: 'p-3 bg-red-100 text-[#E30613] font-black text-xs border-2 border-[#E30613]' }, error),
+                h('div', { className: 'flex gap-3 pt-2' },
+                  h('button', { type: 'button', onClick: onBack, className: `w-1/3 py-3 px-4 font-black border-2 ${darkMode ? 'border-white bg-zinc-800 text-white hover:bg-zinc-700' : 'border-black bg-white text-black hover:bg-gray-200'} uppercase text-xs cursor-pointer` }, 'Volver'),
+                  h('button', { type: 'submit', className: 'w-2/3 py-3 px-4 font-black text-white bg-[#E30613] border-2 border-current hover:bg-red-700 uppercase text-xs cursor-pointer shadow-[3px_3px_0px_0px_currentColor]' }, 'Entrar')
+                )
+              )
+            )
+          );
+        }
+
+        function ManagerDashboard({ schedules, setSchedules, notifications, setNotifications, onBack, darkMode, toggleDarkMode, themeClasses, cardClasses, selectClasses, inputClasses }) {
+          const activeCategories = [...new Set(schedules.map(s => s.category))];
+          const [selectedCat, setSelectedCat] = useState(activeCategories[0] || 'Pinturas');
+          const categorySchedules = schedules.filter(s => s.category === selectedCat);
+          const [selectedMth, setSelectedMth] = useState(categorySchedules[0]?.monthName || '');
+          const [activeTab, setActiveTab] = useState('cobertura');
+
+          const [editingCell, setEditingCell] = useState(null);
+          const [editForm, setEditForm] = useState({ code: '', from: '', to: '' });
+
+          const [uploadCategory, setUploadCategory] = useState(CATEGORIAS[0]);
+          const [file, setFile] = useState(null);
+          const [uploadError, setUploadError] = useState('');
+          const [uploadSuccess, setUploadSuccess] = useState('');
+          const fileInputRef = useRef(null);
+
+          const currentSchedule = categorySchedules.find(s => s.monthName === selectedMth) || categorySchedules[0];
+
+          const openEditModal = (empIndex, dayIndex, currentShiftObj, empName, dNum) => {
+            setEditingCell({ employeeIndex: empIndex, dayIndex, currentShift: currentShiftObj, employeeName: empName, dayNum: dNum });
+            const { from, to } = parseTimeRange(currentShiftObj.time);
+            setEditForm({ code: currentShiftObj.code, from, to });
+          };
+
+          const handleSelectOfficialShift = (code) => {
+            const defaultTime = extractTime(TURNOS_COMPLETOS_OFICIALES[code]);
+            const { from, to } = parseTimeRange(defaultTime);
+            setEditForm({ code, from, to });
+          };
+
+          const saveShiftChanges = () => {
+            if (!editingCell || !currentSchedule) return;
+            const { employeeIndex, dayIndex, employeeName, currentShift } = editingCell;
+
+            let newTime = '';
+            if (editForm.from || editForm.to) {
+                newTime = `${editForm.from || '00:00'} - ${editForm.to || '00:00'}`;
+            }
+
+            const originalTime = extractTime(TURNOS_COMPLETOS_OFICIALES[currentShift.code]);
+            const isTimeModified = newTime !== originalTime && newTime !== ''; // Modified if new custom time
+            const isCodeModified = editForm.code !== currentShift.code;
+            const finalIsModified = currentShift.isModified || isTimeModified || isCodeModified;
+
+            setSchedules(prev => prev.map(sch => {
+              if (sch.id === currentSchedule.id) {
+                const updatedEmployees = [...sch.employees];
+                const updatedShifts = [...updatedEmployees[employeeIndex].shifts];
+                
+                updatedShifts[dayIndex] = {
+                    code: editForm.code,
+                    time: newTime || extractTime(TURNOS_COMPLETOS_OFICIALES[editForm.code]), // default if empty
+                    isModified: finalIsModified
+                };
+
+                updatedEmployees[employeeIndex] = {
+                  ...updatedEmployees[employeeIndex],
+                  shifts: updatedShifts
+                };
+                return {
+                  ...sch,
+                  employees: updatedEmployees
+                };
+              }
+              return sch;
+            }));
+
+            if (finalIsModified) {
+                setNotifications(prev => ({
+                  ...prev,
+                  [employeeName]: true
+                }));
+            }
+
+            setEditingCell(null);
+          };
+
+          const handleExportExcel = () => {
+              if (!currentSchedule) return;
+              
+              let html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
+              html += '<head><meta charset="utf-8"></head><body>';
+              html += `<table border="1" style="border-collapse: collapse; font-family: sans-serif;">`;
+              
+              // Header del documento
+              html += `<tr><th colspan="${currentSchedule.weekdays.length + 6}" style="background-color: #E30613; color: white; font-size: 16px; padding: 10px;">CUADRANTE: ${selectedCat} - ${currentSchedule.monthName}</th></tr>`;
+              
+              // Fila de días
+              html += '<tr><th style="background-color: #000; color: white; padding: 5px;">Trabajador</th>';
+              currentSchedule.weekdays.forEach((wd, i) => {
+                  html += `<th style="background-color: #000; color: white; padding: 5px;">${i + 1} ${wd}</th>`;
+              });
+              html += '<th style="background-color: #333; color: white; padding: 5px;">Hrs Mes</th>';
+              html += '<th style="background-color: #333; color: white; padding: 5px;">Hrs/Semana</th>';
+              html += '<th style="background-color: #333; color: white; padding: 5px;">Descansos (D)</th>';
+              html += '<th style="background-color: #333; color: white; padding: 5px;">Vacaciones (V)</th>';
+              html += '<th style="background-color: #333; color: white; padding: 5px;">Bajas (B)</th>';
+              html += '</tr>';
+
+              // Cuerpo con empleados, turnos y métricas
+              currentSchedule.employees.forEach(emp => {
+                  const stats = calculateEmployeeStats(emp.shifts, currentSchedule.weekdays);
+                  html += `<tr><td style="font-weight: bold; padding: 5px;">${emp.name}</td>`;
+                  emp.shifts.forEach(shiftObj => {
+                      const isMod = shiftObj.isModified;
+                      const style = isMod ? 'background-color: #ffcccc; color: #E30613; font-weight: bold; padding: 5px; text-align: center;' : 'padding: 5px; text-align: center;';
+                      const displayValue = shiftObj.code ? `${shiftObj.code}${shiftObj.time && shiftObj.code !== 'D' ? ' ('+shiftObj.time+')' : ''}` : '';
+                      html += `<td style="${style}">${displayValue}</td>`;
+                  });
+                  html += `<td style="font-weight: bold; padding: 5px; text-align: center;">${stats.totalMonthHours.toFixed(1).replace('.0', '')}h</td>`;
+                  html += `<td style="padding: 5px; text-align: center;">${stats.weeklyHours.map((h, i) => `S${i+1}:${h.toFixed(1).replace('.0', '')}h`).join(' | ')}</td>`;
+                  html += `<td style="padding: 5px; text-align: center;">${stats.countD}</td>`;
+                  html += `<td style="padding: 5px; text-align: center;">${stats.countV}</td>`;
+                  html += `<td style="padding: 5px; text-align: center;">${stats.countB}</td>`;
+                  html += '</tr>';
+              });
+
+              html += '</table></body></html>';
+
+              const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `Cuadrante_${selectedCat}_${currentSchedule.monthName.replace(/\s+/g, '_')}.xls`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+          };
+
+          const handleFileUpload = (e) => {
+            const uploadedFile = e.target.files[0];
+            if (uploadedFile) {
+              setFile(uploadedFile);
+              setUploadError('');
+              setUploadSuccess('');
+            }
+          };
+
+          const processFile = async () => {
+            if (!file) return;
+            setUploadError('');
+            setUploadSuccess('Procesando archivo...');
+            
+            try {
+              let text = '';
+              const isExcel = file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls');
+
+              if (isExcel) {
+                const data = await file.arrayBuffer();
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                text = XLSX.utils.sheet_to_csv(worksheet);
+              } else {
+                text = await new Promise((resolve, reject) => {
+                  const reader = new FileReader();
+                  reader.onload = (e) => resolve(e.target.result);
+                  reader.onerror = reject;
+                  reader.readAsText(file, 'ISO-8859-1');
+                });
+              }
+
+              const newMonthsArray = parseCSV(text, uploadCategory);
+              
+              setSchedules(prev => {
+                let updated = [...prev];
+                newMonthsArray.forEach(newSch => {
+                  const existingIdx = updated.findIndex(s => s.category === newSch.category && s.monthName === newSch.monthName);
+                  if (existingIdx !== -1) {
+                    const existingEmpMap = new Map(updated[existingIdx].employees.map(e => [e.name, e]));
+                    newSch.employees.forEach(emp => existingEmpMap.set(emp.name, emp));
+                    updated[existingIdx] = {
+                      ...updated[existingIdx],
+                      employees: Array.from(existingEmpMap.values())
+                    };
+                  } else {
+                    updated.push(newSch);
+                  }
+                });
+                return updated;
+              });
+              
+              setUploadSuccess(`¡Cuadrante publicado correctamente en ${uploadCategory}!`);
+              setFile(null);
+              if (fileInputRef.current) fileInputRef.current.value = '';
+            } catch (err) {
+              console.error(err);
+              setUploadError('Error al procesar el archivo. Asegúrate de que mantiene el formato original.');
+              setUploadSuccess('');
+            }
+          };
+
+          return h('div', { className: `min-h-screen ${themeClasses} flex flex-col relative transition-colors` },
+            h('header', { className: darkMode ? 'bg-zinc-900 text-zinc-100 border-b-4 border-[#E30613] px-4 py-4 flex flex-col sm:flex-row items-center justify-between sticky top-0 z-10 gap-3' : 'bg-black text-white border-b-4 border-[#E30613] px-4 py-4 flex flex-col sm:flex-row items-center justify-between sticky top-0 z-10 gap-3' },
+              h('div', { className: 'flex items-center gap-3 w-full sm:w-auto' },
+                h('div', { className: 'bg-[#E30613] text-white p-2 font-black border border-current' }, h(IconShield)),
+                h('h1', { className: 'font-black text-base sm:text-lg uppercase tracking-wider' }, 'Panel de Responsable')
+              ),
+              h('div', { className: 'flex items-center gap-4 w-full sm:w-auto justify-end' },
+                h('button', { 
+                  onClick: toggleDarkMode,
+                  className: `p-2 border-2 ${darkMode ? 'border-zinc-100 bg-zinc-800 text-yellow-400' : 'border-black bg-white text-black'} font-black flex items-center gap-1.5 uppercase text-xs cursor-pointer`
+                }, darkMode ? h(IconSun) : h(IconMoon), darkMode ? 'Claro' : 'Oscuro'),
+                h('div', { className: `flex border-2 ${darkMode ? 'border-zinc-100 bg-zinc-800' : 'border-black bg-white'}` },
+                  h('button', {
+                    onClick: () => setActiveTab('cobertura'),
+                    className: `px-3 py-1 font-black uppercase text-xs cursor-pointer ${activeTab === 'cobertura' ? 'bg-[#E30613] text-white' : darkMode ? 'bg-zinc-800 text-zinc-100' : 'bg-white text-black'}`
+                  }, 'Cobertura'),
+                  h('button', {
+                    onClick: () => setActiveTab('publicar'),
+                    className: `px-3 py-1 font-black uppercase text-xs cursor-pointer ${activeTab === 'publicar' ? 'bg-[#E30613] text-white' : darkMode ? 'bg-zinc-800 text-zinc-100' : 'bg-white text-black'}`
+                  }, 'Publicar')
+                ),
+                h('button', { onClick: onBack, className: 'text-[#E30613] hover:underline flex items-center gap-1 text-xs font-black uppercase cursor-pointer' },
+                  h(IconLogOut), ' Salir'
+                )
+              )
+            ),
+            h('main', { className: 'flex-1 p-3 sm:p-6 max-w-[1500px] w-full mx-auto space-y-6' },
+              activeTab === 'cobertura' ? [
+                h('div', { key: 'filter', className: `${cardClasses} p-4 flex flex-col sm:flex-row gap-4 items-center justify-between` },
+                  h('div', { className: 'flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 w-full sm:w-auto' },
+                    h('span', { className: 'font-black text-xs uppercase tracking-wider' }, 'Sección:'),
+                    h('select', {
+                      value: selectedCat,
+                      onChange: (e) => {
+                        setSelectedCat(e.target.value);
+                        const mths = schedules.filter(s => s.category === e.target.value);
+                        if (mths.length > 0) setSelectedMth(mths[0].monthName);
+                      },
+                      className: selectClasses
+                    }, CATEGORIAS.map(cat => h('option', { key: cat, value: cat }, cat)))
+                  ),
+                  categorySchedules.length > 0 && h('div', { className: 'flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 w-full sm:w-auto' },
+                    h('span', { className: 'font-black text-xs uppercase tracking-wider' }, 'Mes:'),
+                    h('select', {
+                      value: selectedMth || currentSchedule?.monthName,
+                      onChange: (e) => setSelectedMth(e.target.value),
+                      className: selectClasses
+                    }, categorySchedules.map(sch => h('option', { key: sch.id, value: sch.monthName }, sch.monthName))),
+                    h('button', {
+                        onClick: handleExportExcel,
+                        className: `ml-2 p-2.5 font-black text-xs uppercase border-2 border-current shadow-[3px_3px_0px_0px_currentColor] bg-[#E30613] text-white hover:bg-red-700 cursor-pointer flex items-center gap-2`
+                    }, h(IconDownload), ' Descargar Excel')
+                  )
+                ),
+
+                !currentSchedule || currentSchedule.employees.length === 0 ? 
+                h('div', { key: 'nocontent', className: `${cardClasses} p-12 text-center` },
+                  h('p', { className: 'font-black uppercase text-sm' }, 'No hay trabajadores cargados en esta sección para el mes seleccionado.')
+                ) :
+                h('div', { key: 'tablecontent', className: `${cardClasses} overflow-hidden` },
+                  h('div', { className: darkMode ? 'p-4 border-b-2 border-zinc-100 bg-zinc-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2' : 'p-4 border-b-2 border-black bg-gray-50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2' },
+                    h('div', null,
+                      h('h3', { className: 'font-black text-sm sm:text-base uppercase' }, `Cobertura: ${selectedCat} (${currentSchedule.monthName})`),
+                      h('p', { className: 'text-xs text-[#E30613] font-black uppercase mt-0.5' }, '💡 Haz clic en cualquier celda para editar el turno.')
+                    ),
+                    h('div', { className: 'flex items-center gap-2' },
+                      h('span', { className: 'text-xs font-black uppercase bg-[#E30613] text-white px-3 py-1 border border-current' }, `${currentSchedule.employees.length} Trabajadores Activos`)
+                    )
+                  ),
+                  h('div', { className: 'overflow-x-auto max-w-full' },
+                    h('table', { className: 'w-full text-left border-collapse text-xs whitespace-nowrap' },
+                      h('thead', null,
+                        h('tr', { className: darkMode ? 'bg-zinc-950 text-zinc-100 border-b-2 border-zinc-100' : 'bg-black text-white border-b-2 border-black' },
+                          h('th', { className: darkMode ? 'p-1.5 sm:p-3 font-black sticky left-0 bg-zinc-950 z-10 w-[84px] sm:w-auto sm:min-w-[180px] text-[10px] sm:text-xs' : 'p-1.5 sm:p-3 font-black sticky left-0 bg-black z-10 w-[84px] sm:w-auto sm:min-w-[180px] text-[10px] sm:text-xs' }, 'Trabajador'),
+                          currentSchedule.weekdays.map((wd, i) => 
+                            h('th', { key: i, className: `p-1 sm:p-2 text-center font-bold ${wd === 'S' || wd === 'D' ? 'text-[#E30613]' : 'opacity-90'}` },
+                              h('div', null, i + 1),
+                              h('div', { className: 'text-[10px]' }, wd)
+                            )
+                          ),
+                          h('th', { className: 'p-1 sm:p-2 text-center font-black bg-[#E30613] text-white border-l-2 border-black dark:border-white w-[50px] sm:min-w-[75px] sm:w-auto text-[9px] sm:text-xs' }, 'TOTAL HRS'),
+                          h('th', { className: 'p-1 sm:p-2 text-center font-black bg-zinc-800 text-white border-l-2 border-black dark:border-white w-[90px] sm:min-w-[180px] sm:w-auto text-[9px] sm:text-xs' }, 'DESGLOSE SEMANAS'),
+                          h('th', { className: 'p-1 sm:p-2 text-center font-black bg-red-600 text-white border-l-2 border-black dark:border-white text-[9px] sm:text-xs' }, 'DESC (D)'),
+                          h('th', { className: 'p-1 sm:p-2 text-center font-black bg-blue-700 text-white border-l-2 border-black dark:border-white text-[9px] sm:text-xs' }, 'VAC (V)'),
+                          h('th', { className: 'p-1 sm:p-2 text-center font-black bg-slate-600 text-white border-l-2 border-black dark:border-white text-[9px] sm:text-xs' }, 'BAJA (B)')
+                        )
+                      ),
+                      h('tbody', { className: darkMode ? 'divide-y divide-zinc-800' : 'divide-y divide-black' },
+                        currentSchedule.employees.map((emp, eIdx) => {
+                          const stats = calculateEmployeeStats(emp.shifts, currentSchedule.weekdays);
+
+                          return h('tr', { key: eIdx, className: darkMode ? 'hover:bg-zinc-800' : 'hover:bg-red-50' },
+                            h('td', { className: darkMode ? 'p-1.5 sm:p-3 font-black sticky left-0 bg-zinc-900 z-10 border-r-2 border-zinc-100 text-[10px] sm:text-xs uppercase flex items-center justify-between gap-1 sm:gap-2 w-[84px] sm:w-auto' : 'p-1.5 sm:p-3 font-black text-black sticky left-0 bg-white z-10 border-r-2 border-black text-[10px] sm:text-xs uppercase flex items-center justify-between gap-1 sm:gap-2 w-[84px] sm:w-auto' },
+                              h('span', { className: 'truncate' }, emp.name),
+                              notifications[emp.name] && h('span', { className: 'shrink-0 bg-[#E30613] text-white text-[9px] sm:text-[10px] font-black px-1 sm:px-1.5 py-0.5 rounded-full border border-current animate-pulse', title: 'Turno modificado' }, '1')
+                            ),
+                            emp.shifts.map((shiftObj, sIdx) => {
+                              const badgeColor = getShiftBadgeStyle(shiftObj.code);
+                              const legendObj = TURNOS_COMPLETOS_OFICIALES;
+                              const titleText = `${emp.name} - Día ${sIdx + 1}: ${shiftObj.time ? shiftObj.time : (legendObj[shiftObj.code] || shiftObj.code)}`;
+                              
+                              return h('td', { key: sIdx, className: 'p-0.5 sm:p-1 text-center' },
+                                h('div', { className: 'relative inline-block w-full h-full' },
+                                    h('button', { 
+                                      onClick: () => openEditModal(eIdx, sIdx, shiftObj, emp.name, sIdx + 1),
+                                      className: `w-6 sm:w-8 py-0.5 sm:py-1 rounded-none text-[9px] sm:text-[10px] font-black ${badgeColor} hover:ring-2 hover:ring-red-600 transition-all cursor-pointer`, 
+                                      title: titleText
+                                    }, shiftObj.code || '-'),
+                                    shiftObj.isModified && h('span', { className: 'absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#E30613] rounded-full border border-white animate-pulse', title: 'Turno modificado manualmente' })
+                                )
+                              );
+                            }),
+                            h('td', { className: 'p-1 sm:p-2 text-center font-black border-l-2 border-black dark:border-white bg-red-100 dark:bg-red-950/40 text-[#E30613] dark:text-red-400 text-[10px] sm:text-xs' }, 
+                              `${stats.totalMonthHours.toFixed(1).replace('.0', '')}h`
+                            ),
+                            h('td', { className: 'p-1 sm:p-2 border-l-2 border-black dark:border-white' }, 
+                              h('div', { className: 'flex flex-wrap gap-0.5 sm:gap-1 justify-center' },
+                                stats.weeklyHours.map((wHrs, wIdx) => 
+                                  h('span', { key: wIdx, className: 'px-1 sm:px-1.5 py-0.5 text-[8px] sm:text-[9px] font-black bg-zinc-200 dark:bg-zinc-800 border border-current rounded-none' }, 
+                                    `S${wIdx + 1}: ${wHrs.toFixed(1).replace('.0', '')}h`
+                                  )
+                                )
+                              )
+                            ),
+                            h('td', { className: 'p-1 sm:p-2 text-center font-black border-l-2 border-black dark:border-white text-[10px] sm:text-xs' }, 
+                              h('span', { className: 'inline-block min-w-[16px] sm:min-w-[20px] px-1 sm:px-1.5 py-0.5 bg-red-500 text-white font-black text-[9px] sm:text-[10px] border border-black' }, stats.countD)
+                            ),
+                            h('td', { className: 'p-1 sm:p-2 text-center font-black border-l-2 border-black dark:border-white text-[10px] sm:text-xs' }, 
+                              h('span', { className: 'inline-block min-w-[16px] sm:min-w-[20px] px-1 sm:px-1.5 py-0.5 bg-blue-700 text-white font-black text-[9px] sm:text-[10px] border border-black' }, stats.countV)
+                            ),
+                            h('td', { className: 'p-1 sm:p-2 text-center font-black border-l-2 border-black dark:border-white text-[10px] sm:text-xs' }, 
+                              h('span', { className: 'inline-block min-w-[16px] sm:min-w-[20px] px-1 sm:px-1.5 py-0.5 bg-slate-500 text-white font-black text-[9px] sm:text-[10px] border border-black' }, stats.countB)
+                            )
+                          );
+                        })
+                      ),
+                      h('tfoot', { className: darkMode ? 'bg-zinc-900 border-t-4 border-zinc-100' : 'bg-gray-100 border-t-4 border-black' },
+                        h('tr', null,
+                          h('td', { className: 'p-1 sm:p-2 text-right text-[9px] sm:text-[10px] font-black uppercase sticky left-0 z-10 bg-inherit w-[84px] sm:w-auto' }, 'Mañana (Total)'),
+                          currentSchedule.weekdays.map((wd, i) => {
+                            const mCount = currentSchedule.employees.filter(e => {
+                                const code = e.shifts[i]?.code || '';
+                                return code.startsWith('M') || code.startsWith('P');
+                            }).length;
+                            return h('td', { key: i, className: 'p-0.5 sm:p-1 text-center text-[9px] sm:text-[10px] font-black text-green-600' }, mCount > 0 ? mCount : '-');
+                          }),
+                          h('td', { colSpan: 5, className: 'p-1 sm:p-2 text-center text-[9px] sm:text-[10px] font-black uppercase text-zinc-500 border-l-2 border-black dark:border-white' }, 'Suma global de turnos de mañana')
+                        ),
+                        h('tr', null,
+                          h('td', { className: 'p-1 sm:p-2 text-right text-[9px] sm:text-[10px] font-black uppercase sticky left-0 z-10 bg-inherit w-[84px] sm:w-auto' }, 'Tarde (Total)'),
+                          currentSchedule.weekdays.map((wd, i) => {
+                            const tCount = currentSchedule.employees.filter(e => {
+                                const code = e.shifts[i]?.code || '';
+                                return code.startsWith('T') || code.startsWith('P');
+                            }).length;
+                            return h('td', { key: i, className: 'p-0.5 sm:p-1 text-center text-[9px] sm:text-[10px] font-black text-yellow-600' }, tCount > 0 ? tCount : '-');
+                          }),
+                          h('td', { colSpan: 5, className: 'p-1 sm:p-2 text-center text-[9px] sm:text-[10px] font-black uppercase text-zinc-500 border-l-2 border-black dark:border-white' }, 'Suma global de turnos de tarde')
+                        )
+                      )
+                    )
+                  )
+                )
+              ] : [
+                h('div', { key: 'pub-container', className: `${cardClasses} max-w-xl mx-auto p-6 space-y-4` },
+                  h('h2', { className: 'text-xl font-black uppercase mb-2 border-b-2 border-current pb-2' }, 'Publicar / Subir Cuadrante'),
+                  h('p', { className: 'text-xs font-bold opacity-80 uppercase mb-4' }, 'Sube el archivo Excel (.xlsx, .xls) o CSV del cuadrante para la sección seleccionada.'),
+                  h('div', null,
+                    h('label', { className: 'block text-xs font-black uppercase tracking-wider mb-1' }, 'Sección'),
+                    h('select', { 
+                      value: uploadCategory, 
+                      onChange: (e) => setUploadCategory(e.target.value),
+                      className: selectClasses
+                    }, CATEGORIAS.map(cat => h('option', { key: cat, value: cat }, cat)))
+                  ),
+                  h('div', null,
+                    h('label', { className: 'block text-xs font-black uppercase tracking-wider mb-1' }, 'Archivo Excel / CSV'),
+                    h('div', { className: darkMode ? 'mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-zinc-100 border-dashed bg-zinc-800 hover:bg-zinc-700 transition-colors cursor-pointer' : 'mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-black border-dashed bg-gray-50 hover:bg-red-50 transition-colors cursor-pointer', onClick: () => fileInputRef.current?.click() },
+                      h('div', { className: 'space-y-1 text-center' },
+                        h('div', { className: 'mx-auto flex justify-center' }, h(IconUpload)),
+                        h('div', { className: 'flex text-xs font-black uppercase justify-center' },
+                          h('span', { className: 'relative cursor-pointer text-[#E30613] hover:underline' },
+                            h('span', null, 'Seleccionar archivo'),
+                            h('input', { type: 'file', accept: '.csv, .xlsx, .xls', className: 'sr-only', ref: fileInputRef, onChange: handleFileUpload })
+                          )
+                        ),
+                        h('p', { className: 'text-xs opacity-70 font-bold uppercase' }, file ? file.name : 'Formato .xlsx o .csv')
+                      )
+                    )
+                  ),
+                  uploadError && h('div', { className: 'p-3 bg-red-100 text-[#E30613] font-black text-xs border-2 border-[#E30613]' }, uploadError),
+                  uploadSuccess && h('div', { className: 'p-3 bg-green-100 text-black font-black text-xs border-2 border-black' }, uploadSuccess),
+                  h('button', { 
+                    onClick: processFile,
+                    disabled: !file,
+                    className: `w-full py-3 px-4 font-black uppercase text-xs border-2 border-current shadow-[3px_3px_0px_0px_currentColor] transition-all cursor-pointer ${file ? 'bg-[#E30613] text-white hover:bg-red-700' : 'bg-gray-500 text-zinc-300 cursor-not-allowed shadow-none'}`
+                  }, 'Procesar y Publicar Cuadrante')
+                )
+              ]
+            ),
+
+            editingCell && h('div', { className: 'fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto' },
+              h('div', { className: `${cardClasses} max-w-lg w-full p-6 space-y-5 my-auto` },
+                h('div', { className: 'flex justify-between items-start border-b-2 border-current pb-3' },
+                  h('div', null,
+                    h('h3', { className: 'font-black text-base uppercase' }, 'Modificar Turno'),
+                    h('p', { className: 'text-xs opacity-80 font-bold uppercase mt-0.5' }, `${editingCell.employeeName} — Día ${editingCell.dayNum}`)
+                  ),
+                  h('button', { onClick: () => setEditingCell(null), className: 'font-black text-lg hover:text-[#E30613] cursor-pointer' }, '✕')
+                ),
+                
+                h('div', { className: darkMode ? 'p-3 bg-zinc-800 border-2 border-zinc-100 flex items-center justify-between' : 'p-3 bg-gray-100 border-2 border-black flex items-center justify-between' },
+                  h('span', { className: 'text-[10px] font-black uppercase' }, 'Turno actual en sistema:'),
+                  h('span', { className: `px-2 py-1 font-black text-[10px] border uppercase ${getShiftBadgeStyle(editingCell.currentShift.code)}` }, `${editingCell.currentShift.code || '-'} (${editingCell.currentShift.time || 'Sin hora'})`)
+                ),
+
+                h('div', { className: 'space-y-2' },
+                   h('label', { className: 'block text-xs font-black uppercase tracking-wider' }, '1. Ajuste Manual de Horario'),
+                   h('div', { className: 'flex gap-4' },
+                      h('div', { className: 'flex-1' },
+                         h('span', { className: 'text-[10px] font-bold uppercase block mb-1' }, 'Hora de Entrada'),
+                         h('input', {
+                             type: 'time',
+                             value: editForm.from,
+                             onChange: e => setEditForm(prev => ({...prev, from: e.target.value})),
+                             className: inputClasses + ' w-full text-center'
+                         })
+                      ),
+                      h('div', { className: 'flex-1' },
+                         h('span', { className: 'text-[10px] font-bold uppercase block mb-1' }, 'Hora de Salida'),
+                         h('input', {
+                             type: 'time',
+                             value: editForm.to,
+                             onChange: e => setEditForm(prev => ({...prev, to: e.target.value})),
+                             className: inputClasses + ' w-full text-center'
+                         })
+                      )
+                   )
+                ),
+
+                h('div', null,
+                  h('label', { className: 'block text-xs font-black uppercase tracking-wider mb-2' }, '2. O seleccionar turno base oficial:'),
+                  h('div', { className: darkMode ? 'grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1 border-2 border-zinc-100 bg-zinc-800' : 'grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1 border-2 border-black bg-white' },
+                    Object.entries(TURNOS_COMPLETOS_OFICIALES).map(([code, desc]) => 
+                      h('button', {
+                        key: code,
+                        onClick: () => handleSelectOfficialShift(code),
+                        className: `p-2.5 border-2 text-left flex flex-col justify-between transition-all cursor-pointer ${editForm.code === code ? 'border-[#E30613] bg-red-100 text-black font-black shadow-sm' : darkMode ? 'border-zinc-100 bg-zinc-900 hover:bg-zinc-700 text-zinc-100' : 'border-black bg-white hover:bg-gray-100 text-black'}`
+                      },
+                        h('span', { className: 'font-black text-xs' }, code),
+                        h('span', { className: 'text-[10px] opacity-80 font-medium truncate w-full mt-1' }, desc)
+                      )
+                    )
+                  )
+                ),
+
+                h('div', { className: 'pt-2 flex justify-end gap-2 border-t-2 border-current mt-4 pt-4' },
+                  h('button', { 
+                    onClick: () => setEditingCell(null),
+                    className: `px-4 py-2 font-black uppercase text-xs border-2 ${darkMode ? 'border-white bg-zinc-800 text-white hover:bg-zinc-700' : 'border-black bg-black text-white hover:bg-gray-800'} cursor-pointer`
+                  }, 'Cancelar'),
+                  h('button', { 
+                    onClick: saveShiftChanges,
+                    className: `px-4 py-2 font-black uppercase text-xs border-2 border-current shadow-[3px_3px_0px_0px_currentColor] bg-[#E30613] text-white hover:bg-red-700 cursor-pointer`
+                  }, 'Guardar Cambios')
+                )
+              )
+            )
+          );
+        }
+
+        function AdminPortal({ schedules, setSchedules, employeePasswords, setEmployeePasswords, onBack, darkMode, toggleDarkMode, themeClasses, cardClasses, selectClasses }) {
+          const [selectedCategory, setSelectedCategory] = useState(CATEGORIAS[0]);
+          const [file, setFile] = useState(null);
+          const [error, setError] = useState('');
+          const [success, setSuccess] = useState('');
+          const [expandedScheduleId, setExpandedScheduleId] = useState(null);
+          const [resetEmpName, setResetEmpName] = useState('');
+          const [newEmpPass, setNewEmpPass] = useState('');
+          const [resetMsg, setResetMsg] = useState('');
+          const fileInputRef = useRef(null);
+
+          const handleFileUpload = (e) => {
+            const uploadedFile = e.target.files[0];
+            if (uploadedFile) {
+              setFile(uploadedFile);
+              setError('');
+              setSuccess('');
+            }
+          };
+
+          const processFile = async () => {
+            if (!file) return;
+            setError('');
+            setSuccess('Procesando archivo...');
+            
+            try {
+              let text = '';
+              const isExcel = file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls');
+
+              if (isExcel) {
+                const data = await file.arrayBuffer();
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                text = XLSX.utils.sheet_to_csv(worksheet);
+              } else {
+                text = await new Promise((resolve, reject) => {
+                  const reader = new FileReader();
+                  reader.onload = (e) => resolve(e.target.result);
+                  reader.onerror = reject;
+                  reader.readAsText(file, 'ISO-8859-1');
+                });
+              }
+
+              const newMonthsArray = parseCSV(text, selectedCategory);
+              
+              setSchedules(prev => {
+                let updated = [...prev];
+                newMonthsArray.forEach(newSch => {
+                  const existingIdx = updated.findIndex(s => s.category === newSch.category && s.monthName === newSch.monthName);
+                  if (existingIdx !== -1) {
+                    const existingEmpMap = new Map(updated[existingIdx].employees.map(e => [e.name, e]));
+                    newSch.employees.forEach(emp => existingEmpMap.set(emp.name, emp));
+                    updated[existingIdx] = {
+                      ...updated[existingIdx],
+                      employees: Array.from(existingEmpMap.values())
+                    };
+                  } else {
+                    updated.push(newSch);
+                  }
+                });
+                return updated;
+              });
+              
+              setSuccess(`¡Cuadrante procesado correctamente! Trabajadores añadidos a ${selectedCategory}.`);
+              setFile(null);
+              if (fileInputRef.current) fileInputRef.current.value = '';
+            } catch (err) {
+              console.error(err);
+              setError('Error al procesar el archivo. Asegúrate de que mantiene el formato original.');
+              setSuccess('');
+            }
+          };
+
+          const handleDeleteSchedule = (id) => {
+            setSchedules(prev => prev.filter(s => s.id !== id));
+          };
+
+          const handleDeleteEmployee = (scheduleId, employeeName) => {
+            setSchedules(prev => prev.map(sch => {
+              if (sch.id === scheduleId) {
+                return {
+                  ...sch,
+                  employees: sch.employees.filter(emp => emp.name !== employeeName)
+                };
+              }
+              return sch;
+            }));
+          };
+
+          const allEmployees = [...new Set(schedules.flatMap(s => s.employees.map(e => e.name)))];
+
+          const handleResetPassword = (e) => {
+            e.preventDefault();
+            if (!resetEmpName) return;
+            setEmployeePasswords(prev => ({
+              ...prev,
+              [resetEmpName]: newEmpPass
+            }));
+            setResetMsg(`¡Contraseña actualizada para ${resetEmpName}!`);
+            setResetEmpName('');
+            setNewEmpPass('');
+            setTimeout(() => setResetMsg(''), 4000);
+          };
+
+          return h('div', { className: `min-h-screen ${themeClasses} flex flex-col transition-colors` },
+            h('header', { className: darkMode ? 'bg-zinc-900 text-zinc-100 border-b-4 border-[#E30613] px-4 py-4 flex items-center justify-between sticky top-0 z-10' : 'bg-black text-white border-b-4 border-[#E30613] px-4 py-4 flex items-center justify-between sticky top-0 z-10' },
+              h('div', { className: 'flex items-center gap-3' },
+                h('div', { className: 'bg-[#E30613] text-white p-2 font-black border border-current' }, h(IconBriefcase)),
+                h('h1', { className: 'font-black text-base sm:text-lg uppercase tracking-wider' }, 'Panel de Coordinación')
+              ),
+              h('div', { className: 'flex items-center gap-3' },
+                h('button', { onClick: toggleDarkMode, className: `p-2 border-2 ${darkMode ? 'border-zinc-100 bg-zinc-800 text-yellow-400' : 'border-black bg-white text-black'} font-black flex items-center gap-1.5 uppercase text-xs cursor-pointer` }, darkMode ? h(IconSun) : h(IconMoon), darkMode ? 'Claro' : 'Oscuro'),
+                h('button', { onClick: onBack, className: 'text-[#E30613] hover:underline flex items-center gap-1 text-xs font-black uppercase cursor-pointer' },
+                  h(IconLogOut), ' Salir'
+                )
+              )
+            ),
+            h('main', { className: 'flex-1 p-3 sm:p-6 max-w-3xl w-full mx-auto space-y-6' },
+              h('div', { className: `${cardClasses} p-6` },
+                h('h2', { className: 'text-xl font-black uppercase mb-6 border-b-2 border-current pb-2' }, 'Subir Cuadrante'),
+                h('div', { className: 'space-y-4' },
+                  h('div', null,
+                    h('label', { className: 'block text-xs font-black uppercase tracking-wider mb-1' }, 'Sección'),
+                    h('select', { 
+                      value: selectedCategory, 
+                      onChange: (e) => setSelectedCategory(e.target.value),
+                      className: selectClasses
+                    }, CATEGORIAS.map(cat => h('option', { key: cat, value: cat }, cat)))
+                  ),
+                  h('div', null,
+                    h('label', { className: 'block text-xs font-black uppercase tracking-wider mb-1' }, 'Archivo Excel / CSV'),
+                    h('div', { className: darkMode ? 'mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-zinc-100 border-dashed bg-zinc-800 hover:bg-zinc-700 transition-colors cursor-pointer' : 'mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-black border-dashed bg-gray-50 hover:bg-red-50 transition-colors cursor-pointer', onClick: () => fileInputRef.current?.click() },
+                      h('div', { className: 'space-y-1 text-center' },
+                        h('div', { className: 'mx-auto flex justify-center' }, h(IconUpload)),
+                        h('div', { className: 'flex text-xs font-black uppercase justify-center' },
+                          h('span', { className: 'relative cursor-pointer text-[#E30613] hover:underline' },
+                            h('span', null, 'Seleccionar archivo'),
+                            h('input', { type: 'file', accept: '.csv, .xlsx, .xls', className: 'sr-only', ref: fileInputRef, onChange: handleFileUpload })
+                          )
+                        ),
+                        h('p', { className: 'text-xs opacity-70 font-bold uppercase' }, file ? file.name : 'Formato .xlsx o .csv')
+                      )
+                    )
+                  ),
+                  error && h('div', { className: 'p-3 bg-red-100 text-[#E30613] font-black text-xs border-2 border-[#E30613]' }, error),
+                  success && h('div', { className: 'p-3 bg-green-100 text-black font-black text-xs border-2 border-black' }, success),
+                  h('button', { 
+                    onClick: processFile,
+                    disabled: !file,
+                    className: `w-full py-3 px-4 font-black uppercase text-xs border-2 border-current shadow-[3px_3px_0px_0px_currentColor] transition-all cursor-pointer ${file ? 'bg-[#E30613] text-white hover:bg-red-700' : 'bg-gray-500 text-zinc-300 cursor-not-allowed shadow-none'}`
+                  }, 'Procesar y Publicar')
+                )
+              ),
+
+              h('div', { className: `${cardClasses} p-6` },
+                h('h2', { className: 'text-xl font-black uppercase mb-4 border-b-2 border-current pb-2 flex items-center gap-2' }, h(IconKey), ' Gestión de Contraseñas de Empleados'),
+                h('p', { className: 'text-xs font-bold opacity-80 uppercase mb-4' }, 'El coordinador puede modificar o restablecer la contraseña personal de cualquier empleado.'),
+                h('form', { onSubmit: handleResetPassword, className: 'space-y-4' },
+                  h('div', null,
+                    h('label', { className: 'block text-xs font-black uppercase tracking-wider mb-1' }, 'Seleccionar Empleado'),
+                    h('select', {
+                      value: resetEmpName,
+                      onChange: (e) => setResetEmpName(e.target.value),
+                      className: selectClasses,
+                      required: true
+                    },
+                      h('option', { value: '' }, '-- Seleccione empleado --'),
+                      allEmployees.map(name => h('option', { key: name, value: name }, `${name} (${employeePasswords[name] ? 'Configurada' : 'Sin configurar'})`))
+                    )
+                  ),
+                  h('div', null,
+                    h('label', { className: 'block text-xs font-black uppercase tracking-wider mb-1' }, 'Nueva Contraseña Personal'),
+                    h('input', {
+                      type: 'text',
+                      placeholder: 'Introduce nueva contraseña',
+                      value: newEmpPass,
+                      onChange: (e) => setNewEmpPass(e.target.value),
+                      className: darkMode ? 'w-full border-2 border-zinc-100 bg-zinc-800 text-zinc-100 p-3 font-bold text-xs uppercase focus:outline-none' : 'w-full border-2 border-black bg-white text-black p-3 font-bold text-xs uppercase focus:outline-none',
+                      required: true
+                    })
+                  ),
+                  resetMsg && h('div', { className: 'p-3 bg-green-100 text-black font-black text-xs border-2 border-black' }, resetMsg),
+                  h('button', {
+                    type: 'submit',
+                    className: `w-full py-3 px-4 font-black text-white ${darkMode ? 'bg-zinc-100 text-zinc-950 hover:bg-white' : 'bg-black hover:bg-gray-800'} border-2 border-current uppercase text-xs cursor-pointer shadow-[3px_3px_0px_0px_currentColor]`
+                  }, 'Actualizar Contraseña de Empleado')
+                )
+              ),
+
+              h('div', { className: `${cardClasses} p-6` },
+                h('h2', { className: 'text-lg font-black uppercase mb-4 border-b-2 border-current pb-2' }, 'Meses, Secciones y Trabajadores Activos'),
+                schedules.length === 0 ? h('p', { className: 'font-black uppercase text-xs text-center py-4' }, 'No hay cuadrantes cargados.') :
+                h('div', { className: 'space-y-3' },
+                  schedules.map(schedule => {
+                    const isExpanded = expandedScheduleId === schedule.id;
+                    return h('div', { key: schedule.id, className: darkMode ? 'bg-zinc-900 border-2 border-zinc-100 overflow-hidden' : 'bg-white border-2 border-black overflow-hidden' },
+                      h('div', { className: darkMode ? 'flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-3 bg-zinc-950' : 'flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-3 bg-gray-50' },
+                        h('div', { className: 'flex items-center gap-3 cursor-pointer select-none', onClick: () => setExpandedScheduleId(isExpanded ? null : schedule.id) },
+                          h(IconFileText),
+                          h('div', null,
+                            h('p', { className: 'font-black text-xs uppercase' }, schedule.category, ' — ', h('span', { className: 'text-[#E30613]' }, schedule.monthName)),
+                            h('p', { className: 'text-[10px] opacity-70 font-bold uppercase' }, `${schedule.employees.length} empleados registrados`)
+                          )
+                        ),
+                        h('div', { className: 'flex items-center gap-2 justify-end' },
+                          h('button', { 
+                            onClick: () => setExpandedScheduleId(isExpanded ? null : schedule.id),
+                            className: darkMode ? 'px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-[10px] font-black uppercase border border-white cursor-pointer' : 'px-3 py-1.5 bg-black text-white hover:bg-gray-800 text-[10px] font-black uppercase border border-black cursor-pointer'
+                          }, isExpanded ? 'Ocultar' : 'Ver Empleados'),
+                          h('button', { 
+                            onClick: () => handleDeleteSchedule(schedule.id),
+                            title: 'Borrar mes entero',
+                            className: 'p-2 bg-[#E30613] hover:bg-red-700 text-white border border-current transition-colors cursor-pointer'
+                          }, h(IconTrash2))
+                        )
+                      ),
+                      isExpanded && h('div', { className: darkMode ? 'bg-zinc-900 border-t-2 border-zinc-100 p-4 space-y-2' : 'bg-white border-t-2 border-black p-4 space-y-2' },
+                        h('p', { className: 'text-[10px] font-black uppercase tracking-wider mb-2' }, 'Trabajadores en este cuadrante:'),
+                        schedule.employees.length === 0 ? h('p', { className: 'text-xs opacity-70 font-bold uppercase' }, 'No quedan empleados.') :
+                        h('div', { className: darkMode ? 'max-h-48 overflow-y-auto space-y-1 divide-y divide-zinc-800' : 'max-h-48 overflow-y-auto space-y-1 divide-y divide-black' },
+                          schedule.employees.map(emp => 
+                            h('div', { key: emp.name, className: darkMode ? 'flex items-center justify-between py-2 px-3 hover:bg-zinc-800' : 'flex items-center justify-between py-2 px-3 hover:bg-red-50' },
+                              h('span', { className: 'text-xs font-black uppercase' }, emp.name),
+                              h('button', {
+                                onClick: () => handleDeleteEmployee(schedule.id, emp.name),
+                                title: `Borrar a ${emp.name}`,
+                                className: 'text-white hover:bg-red-700 text-[10px] font-black uppercase px-2.5 py-1 bg-[#E30613] border border-current cursor-pointer'
+                              }, 'Eliminar')
+                            )
+                          )
+                        )
+                      )
+                    );
+                  })
+                )
+              )
+            )
+          );
+        }
+
+        function EmployeePortal({ schedules, currentView, setCurrentView, selectedCategory, setSelectedCategory, selectedEmployeeName, setSelectedEmployeeName, selectedMonth, setSelectedMonth, notifications, setNotifications, employeePasswords, setEmployeePasswords, darkMode, toggleDarkMode, themeClasses, cardClasses, selectClasses, onLogout }) {
+          const [searchTerm, setSearchTerm] = useState('');
+
+          const [pendingEmp, setPendingEmp] = useState(null);
+          const [empModalType, setEmpModalType] = useState(null);
+          const [empPassInput, setEmpPassInput] = useState('');
+          const [empPassError, setEmpPassError] = useState('');
+          const [selectedDay, setSelectedDay] = useState(null);
+
+          // Reiniciar día seleccionado al cambiar de mes o empleado
+          useEffect(() => {
+            setSelectedDay(null);
+          }, [selectedMonth, selectedEmployeeName, selectedCategory]);
+
+          const handleCategoryClick = (cat, isActive) => {
+            if (!isActive) return;
+            setSelectedCategory(cat);
+            const availableMonths = schedules.filter(s => s.category === cat);
+            if (availableMonths.length > 0) setSelectedMonth(availableMonths[0].monthName);
+            setCurrentView('employee-list');
+          };
+
+          const handleEmployeeClick = (empName) => {
+            setPendingEmp(empName);
+            setEmpPassInput('');
+            setEmpPassError('');
+            if (!employeePasswords[empName]) {
+              setEmpModalType('create');
+            } else {
+              setEmpModalType('verify');
+            }
+          };
+
+          const handleEmpPassSubmit = (e) => {
+            e.preventDefault();
+            if (!pendingEmp) return;
+
+            if (empModalType === 'create') {
+              if (!empPassInput.trim()) {
+                setEmpPassError('La contraseña no puede estar vacía.');
+                return;
+              }
+              setEmployeePasswords(prev => ({
+                ...prev,
+                [pendingEmp]: empPassInput.trim()
+              }));
+              setSelectedEmployeeName(pendingEmp);
+              setNotifications(prev => ({ ...prev, [pendingEmp]: false }));
+              setPendingEmp(null);
+              setCurrentView('employee-calendar');
+            } else if (empModalType === 'verify') {
+              if (empPassInput.trim() === employeePasswords[pendingEmp]) {
+                setSelectedEmployeeName(pendingEmp);
+                setNotifications(prev => ({ ...prev, [pendingEmp]: false }));
+                setPendingEmp(null);
+                setCurrentView('employee-calendar');
+              } else {
+                setEmpPassError('Contraseña incorrecta.');
+              }
+            }
+          };
+
+          const handleDayClick = (dayNum) => {
+            setSelectedDay(dayNum);
+            // Scroll suave hacia el elemento del día detallado
+            const targetElement = document.getElementById(`day-detail-${dayNum}`);
+            if (targetElement) {
+              targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          };
+
+          if (currentView === 'employee-select') {
+            const activeCategories = [...new Set(schedules.map(s => s.category))];
+
+            return h('div', { className: `min-h-screen ${themeClasses} relative transition-colors` },
+              h('header', { className: darkMode ? 'bg-zinc-900 text-zinc-100 border-b-4 border-[#E30613] px-4 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm' : 'bg-black text-white border-b-4 border-[#E30613] px-4 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm' },
+                h('div', { className: 'flex items-center gap-3' },
+                  h(IconHome),
+                  h('h1', { className: 'font-black text-lg uppercase tracking-wider' }, 'Mi Horario')
+                ),
+                h('div', { className: 'flex items-center gap-3' },
+                  h('button', { onClick: toggleDarkMode, className: `p-2 border-2 ${darkMode ? 'border-zinc-100 bg-zinc-800 text-yellow-400' : 'border-black bg-white text-black'} font-black flex items-center gap-1.5 uppercase text-xs cursor-pointer` }, darkMode ? h(IconSun) : h(IconMoon), darkMode ? 'Claro' : 'Oscuro'),
+                  h('button', { onClick: onLogout, className: 'text-[#E30613] hover:underline flex items-center gap-1 text-xs font-black uppercase cursor-pointer' }, h(IconLogOut), ' Salir')
+                )
+              ),
+              h('main', { className: 'p-4 max-w-lg mx-auto mt-4 space-y-6' },
+                h('div', { className: 'text-center mb-8' },
+                  h('h2', { className: 'text-2xl font-black uppercase tracking-tight' }, '¿A qué sección perteneces?'),
+                  h('p', { className: 'font-bold uppercase text-xs mt-2 opacity-80' }, 'Selecciona tu departamento para continuar sin contraseña')
+                ),
+                h('div', { className: 'grid grid-cols-2 gap-3' },
+                  CATEGORIAS.map(cat => {
+                    const isActive = activeCategories.includes(cat);
+                    return h('button', {
+                      key: cat,
+                      onClick: () => handleCategoryClick(cat, isActive),
+                      className: `p-4 rounded-none text-left border-2 transition-all ${isActive ? `${cardClasses} hover:bg-[#E30613] hover:text-white cursor-pointer` : darkMode ? 'bg-zinc-900/50 border-zinc-700 opacity-30 cursor-not-allowed' : 'bg-gray-100 border-gray-300 opacity-40 cursor-not-allowed'}`
+                    },
+                      h('span', { className: `block font-black uppercase text-xs ${isActive ? '' : 'opacity-50'}` }, cat),
+                      !isActive && h('span', { className: 'text-[9px] font-black mt-1 block uppercase opacity-60' }, 'Sin datos')
+                    );
+                  })
+                )
+              )
+            );
+          }
+
+          if (currentView === 'employee-list') {
+            const categorySchedules = schedules.filter(s => s.category === selectedCategory);
+            const activeSchedule = categorySchedules.find(s => s.monthName === selectedMonth) || categorySchedules[0]; 
+            const filteredEmployees = activeSchedule?.employees.filter(emp => emp.name.toLowerCase().includes(searchTerm.toLowerCase())) || [];
+
+            return h('div', { className: `min-h-screen ${themeClasses} flex flex-col relative transition-colors` },
+              h('header', { className: darkMode ? 'bg-zinc-900 text-zinc-100 border-b-4 border-[#E30613] px-4 py-4 flex flex-col sm:flex-row items-center justify-between sticky top-0 z-10 gap-3' : 'bg-black text-white border-b-4 border-[#E30613] px-4 py-4 flex flex-col sm:flex-row items-center justify-between sticky top-0 z-10 gap-3' },
+                h('div', { className: 'flex items-center gap-3 w-full sm:w-auto' },
+                  h('button', { onClick: () => setCurrentView('employee-select'), className: 'text-[#E30613] hover:underline cursor-pointer' }, h(IconChevronRight, { size: 24, className: 'rotate-180' })),
+                  h('div', null,
+                    h('h1', { className: 'font-black text-base sm:text-lg uppercase tracking-wider' }, selectedCategory),
+                    h('p', { className: 'text-[10px] font-black text-[#E30613] uppercase' }, 'Selecciona tu nombre')
+                  )
+                ),
+                h('div', { className: 'flex items-center gap-3 w-full sm:w-auto justify-end' },
+                  h('select', { 
+                    value: selectedMonth,
+                    onChange: (e) => setSelectedMonth(e.target.value),
+                    className: selectClasses
+                  }, categorySchedules.map(sch => h('option', { key: sch.id, value: sch.monthName }, sch.monthName))),
+                  h('button', { onClick: toggleDarkMode, className: `p-2 border-2 ${darkMode ? 'border-zinc-100 bg-zinc-800 text-yellow-400' : 'border-black bg-white text-black'} font-black flex items-center gap-1.5 uppercase text-xs cursor-pointer` }, darkMode ? h(IconSun) : h(IconMoon)),
+                  h('button', { onClick: onLogout, className: 'text-[#E30613] hover:underline flex items-center gap-1 text-xs font-black uppercase cursor-pointer' }, h(IconLogOut), ' Salir')
+                )
+              ),
+              h('main', { className: 'flex-1 p-4 max-w-lg w-full mx-auto space-y-4' },
+                h('div', { className: 'relative' },
+                  h('span', { className: 'absolute left-3 top-1/2 -translate-y-1/2 opacity-70' }, h(IconSearch)),
+                  h('input', { 
+                    type: 'text', 
+                    placeholder: 'Buscar por apellidos o nombre...', 
+                    value: searchTerm,
+                    onChange: (e) => setSearchTerm(e.target.value),
+                    className: darkMode ? 'w-full pl-10 pr-4 py-3 border-2 border-zinc-100 rounded-none font-bold uppercase bg-zinc-800 text-zinc-100 text-xs focus:outline-none' : 'w-full pl-10 pr-4 py-3 border-2 border-black rounded-none font-bold uppercase bg-white text-xs focus:outline-none'
+                  })
+                ),
+                h('div', { className: `${cardClasses} overflow-hidden` },
+                  filteredEmployees.length === 0 ? h('p', { className: 'p-6 text-center font-black uppercase text-xs' }, 'No se encontraron empleados para este mes.') :
+                  h('ul', { className: darkMode ? 'divide-y divide-zinc-800 max-h-[60vh] overflow-y-auto' : 'divide-y divide-black max-h-[60vh] overflow-y-auto' },
+                    filteredEmployees.map((emp, idx) => {
+                      const hasNotif = notifications[emp.name];
+                      return h('li', { key: idx },
+                        h('button', { 
+                          onClick: () => handleEmployeeClick(emp.name),
+                          className: darkMode ? 'w-full text-left px-4 py-4 hover:bg-[#E30613] hover:text-white flex items-center justify-between transition-colors cursor-pointer font-black text-xs uppercase group' : 'w-full text-left px-4 py-4 hover:bg-[#E30613] hover:text-white flex items-center justify-between transition-colors cursor-pointer font-black text-xs uppercase group'
+                        },
+                          h('div', { className: 'flex items-center gap-2' },
+                            h('span', null, emp.name),
+                            hasNotif && h('span', { className: 'bg-[#E30613] group-hover:bg-white group-hover:text-[#E30613] text-white text-[10px] font-black px-2 py-0.5 rounded-full border border-current animate-bounce shadow-sm' }, 'MODIFICADO')
+                          ),
+                          h(IconChevronRight, { size: 18 })
+                        )
+                      );
+                    })
+                  )
+                )
+              ),
+
+              pendingEmp && h('div', { className: 'fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 z-50' },
+                h('div', { className: `${cardClasses} max-w-sm w-full p-6 space-y-4` },
+                  h('div', { className: 'text-center border-b-2 border-current pb-3' },
+                    h('div', { className: 'inline-block bg-[#E30613] text-white p-3 border border-current mb-2' }, h(IconKey)),
+                    h('h3', { className: 'font-black text-base uppercase' }, empModalType === 'create' ? 'Crear Contraseña Personal' : 'Acceso Personal'),
+                    h('p', { className: 'text-[10px] uppercase font-black mt-1 opacity-80' }, empModalType === 'create' ? `Establece una contraseña para ${pendingEmp}. La necesitarás en futuros accesos.` : `Introduce tu contraseña para acceder a tu cuadrante.`)
+                  ),
+                  h('form', { onSubmit: handleEmpPassSubmit, className: 'space-y-4' },
+                    h('input', {
+                      type: 'password',
+                      placeholder: empModalType === 'create' ? 'Nueva contraseña' : 'Tu contraseña',
+                      value: empPassInput,
+                      onChange: (e) => setEmpPassInput(e.target.value),
+                      className: darkMode ? 'w-full border-2 border-zinc-100 rounded-none p-3 text-center font-black text-sm bg-zinc-800 text-zinc-100 focus:outline-none' : 'w-full border-2 border-black rounded-none p-3 text-center font-black text-sm bg-white focus:outline-none',
+                      autoFocus: true,
+                      required: true
+                    }),
+                    empPassError && h('p', { className: 'text-[10px] font-black text-[#E30613] text-center uppercase' }, empPassError),
+                    h('div', { className: 'flex gap-2 pt-2' },
+                      h('button', {
+                        type: 'button',
+                        onClick: () => setPendingEmp(null),
+                        className: darkMode ? 'flex-1 py-2.5 font-black text-white bg-zinc-800 border-2 border-zinc-100 hover:bg-zinc-700 text-xs uppercase cursor-pointer' : 'flex-1 py-2.5 font-black text-black bg-white border-2 border-black hover:bg-gray-200 text-xs uppercase cursor-pointer'
+                      }, 'Cancelar'),
+                      h('button', {
+                        type: 'submit',
+                        className: 'flex-1 py-2.5 font-black text-white bg-[#E30613] border-2 border-current hover:bg-red-700 text-xs uppercase cursor-pointer'
+                      }, empModalType === 'create' ? 'Guardar y Entrar' : 'Entrar')
+                    )
+                  )
+                )
+              )
+            );
+          }
+
+          if (currentView === 'employee-calendar') {
+            const categorySchedules = schedules.filter(s => s.category === selectedCategory);
+            const schedule = categorySchedules.find(s => s.monthName === selectedMonth) || categorySchedules[0]; 
+            const employee = schedule?.employees.find(e => e.name === selectedEmployeeName);
+
+            if (!schedule || !employee) return null;
+
+            const indexOfL = schedule.weekdays.indexOf('L');
+            const startOffset = indexOfL !== -1 ? (7 - (indexOfL % 7)) % 7 : 0;
+            const emptyCells = Array(startOffset).fill(null);
+
+            const legendObj = TURNOS_COMPLETOS_OFICIALES;
+
+            return h('div', { className: `min-h-screen ${themeClasses} pb-8 transition-colors` },
+              h('header', { className: 'bg-[#E30613] text-white pt-6 pb-6 px-4 sticky top-0 z-20 shadow-md border-b-4 border-current' },
+                h('div', { className: 'max-w-6xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4' },
+                  h('div', { className: 'flex items-start gap-4' },
+                    h('button', { onClick: () => setCurrentView('employee-list'), className: 'text-white hover:underline mt-1 cursor-pointer' }, h(IconChevronRight, { size: 24, className: 'rotate-180' })),
+                    h('div', null,
+                      h('h1', { className: 'font-black text-xl sm:text-2xl uppercase tracking-wider leading-tight mb-1' }, employee.name),
+                      h('div', { className: 'flex items-center gap-2 text-white text-xs font-black' },
+                        h('span', { className: 'bg-black text-white border border-current px-2 py-0.5 rounded-none uppercase' }, schedule.category)
+                      )
+                    )
+                  ),
+                  h('div', { className: 'flex items-center gap-2 bg-black p-2 border-2 border-current w-full md:w-auto justify-between md:justify-start' },
+                    h('div', { className: 'flex items-center gap-2' }, h(IconCalendar), h('span', { className: 'text-xs font-black uppercase text-[#E30613]' }, 'Mes:')),
+                    h('select', { 
+                      value: selectedMonth,
+                      onChange: (e) => setSelectedMonth(e.target.value),
+                      className: 'bg-white text-black font-black uppercase text-xs rounded-none px-3 py-1.5 focus:outline-none cursor-pointer border border-black'
+                    }, categorySchedules.map(sch => h('option', { key: sch.id, value: sch.monthName }, sch.monthName))),
+                    h('button', { onClick: onLogout, className: 'ml-2 text-white hover:text-gray-300 flex items-center gap-1 text-xs font-black uppercase cursor-pointer' }, h(IconLogOut))
+                  )
+                )
+              ),
+              h('main', { className: 'max-w-6xl mx-auto mt-6 px-4 flex flex-col-reverse lg:flex-row gap-6' },
+                h('div', { className: 'flex-1 space-y-3' },
+                  h('h3', { className: 'text-base sm:text-lg font-black uppercase mb-4 px-1' }, `Detalle Diario (${schedule.monthName})`),
+                  employee.shifts.map((shiftObj, idx) => {
+                    if (!shiftObj || !shiftObj.code) return null; 
+                    const dayNum = idx + 1;
+                    const weekdayCode = schedule.weekdays[idx] || '';
+                    const shiftDesc = legendObj[shiftObj.code] || 'Turno';
+                    const style = getShiftBadgeStyle(shiftObj.code);
+                    const isWeekend = weekdayCode === 'S' || weekdayCode === 'D';
+                    const isMod = shiftObj.isModified;
+                    const isSelected = selectedDay === dayNum;
+
+                    return h('div', { 
+                      key: dayNum, 
+                      id: `day-detail-${dayNum}`,
+                      className: `${cardClasses} flex overflow-hidden transition-all duration-300 ${isSelected ? 'ring-4 ring-[#E30613] border-[#E30613] scale-[1.02] bg-red-50 dark:bg-zinc-800' : isMod ? 'border-[#E30613] shadow-[0_0_8px_rgba(227,6,19,0.5)]' : ''}` 
+                    },
+                      h('div', { className: `w-14 sm:w-16 flex flex-col items-center justify-center p-3 border-r-2 border-current ${isWeekend ? 'bg-red-500/20' : 'opacity-80'}` },
+                        h('span', { className: 'text-[10px] sm:text-xs font-black uppercase' }, weekdayCode),
+                        h('span', { className: 'text-xl sm:text-2xl font-black leading-none mt-1' }, dayNum)
+                      ),
+                      h('div', { className: 'flex-1 p-3 flex flex-col justify-center gap-1 relative' },
+                        h('div', { className: 'flex items-center justify-between' },
+                          h('span', { className: `px-2 py-0.5 text-xs font-black uppercase ${style}` }, shiftObj.code === 'D' ? 'LIBRE' : shiftObj.code),
+                          isMod && h('span', { className: 'text-[9px] font-black bg-[#E30613] text-white px-2 py-0.5 border border-white uppercase tracking-wider' }, 'Modificado'),
+                          isSelected && h('span', { className: 'text-[9px] font-black bg-[#E30613] text-white px-2 py-0.5 border border-white uppercase tracking-wider animate-pulse ml-auto' }, 'Día Seleccionado')
+                        ),
+                        h('div', { className: 'text-xs sm:text-sm font-black uppercase flex items-center gap-1.5 mt-1' },
+                          shiftObj.code !== 'D' && shiftObj.code !== 'V' && shiftObj.code !== 'B' && h(IconClock),
+                          shiftObj.code !== 'D' && shiftObj.code !== 'V' && shiftObj.code !== 'B' ? (shiftObj.time || shiftDesc) : shiftDesc
+                        )
+                      )
+                    );
+                  })
+                ),
+                h('div', { className: 'flex-1 lg:max-w-md' },
+                  h('div', { className: `${cardClasses} p-4 sm:p-5 lg:sticky lg:top-36` },
+                    h('h3', { className: 'text-base sm:text-lg font-black uppercase mb-1 text-center border-b-2 border-current pb-2' }, `Calendario — ${schedule.monthName}`),
+                    h('p', { className: 'text-[10px] font-black uppercase text-[#E30613] text-center mb-4' }, '💡 Toca un día para ir a su detalle'),
+                    h('div', { className: 'grid grid-cols-7 gap-1 text-center mb-2' },
+                      ['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d, i) => h('div', { key: d, className: `font-black text-xs ${i >= 5 ? 'text-[#E30613]' : ''}` }, d))
+                    ),
+                    h('div', { className: 'grid grid-cols-7 gap-1.5' },
+                      emptyCells.map((_, i) => h('div', { key: `empty-${i}`, className: 'p-1' })),
+                      employee.shifts.map((shiftObj, idx) => {
+                        if (!shiftObj || !shiftObj.code) return null;
+                        const dayNum = idx + 1;
+                        const weekdayCode = schedule.weekdays[idx] || '';
+                        const style = getShiftBadgeStyle(shiftObj.code);
+                        const isWeekend = weekdayCode === 'S' || weekdayCode === 'D';
+                        const isMod = shiftObj.isModified;
+                        const isSelected = selectedDay === dayNum;
+                        
+                        const tooltipTime = shiftObj.time ? ` (${shiftObj.time})` : '';
+                        const titleText = `${legendObj[shiftObj.code] || shiftObj.code}${tooltipTime}`;
+
+                        return h('button', { 
+                          key: dayNum, 
+                          type: 'button',
+                          title: titleText,
+                          onClick: () => handleDayClick(dayNum),
+                          className: `flex flex-col items-center justify-center p-1.5 border-2 border-current cursor-pointer hover:scale-105 active:scale-95 transition-all relative ${style} ${isWeekend ? 'ring-1 ring-current' : ''} ${isSelected ? 'ring-4 ring-[#E30613] z-10 scale-105' : ''}`,
+                          style: { minHeight: '3rem', touchAction: 'manipulation' }
+                        },
+                          isMod && h('span', { className: 'absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-[#E30613] border border-white rounded-full animate-pulse' }),
+                          h('span', { className: 'text-[9px] sm:text-[10px] font-black w-full text-left leading-none opacity-80' }, dayNum),
+                          h('span', { className: 'text-[11px] sm:text-xs font-black mt-auto text-center leading-tight tracking-tighter' }, shiftObj.code === 'D' ? 'LIB' : shiftObj.code)
+                        );
+                      })
+                    ),
+                    h('div', { className: 'mt-6 pt-4 border-t-2 border-current flex flex-wrap gap-2 sm:gap-3 text-xs font-black uppercase justify-center' },
+                      h('span', { className: 'flex items-center gap-1' }, h('div', { className: 'w-3 h-3 bg-red-500 border border-current' }), ' Libre'),
+                      h('span', { className: 'flex items-center gap-1' }, h('div', { className: 'w-3 h-3 bg-green-400 border border-current' }), ' Mañana'),
+                      h('span', { className: 'flex items-center gap-1' }, h('div', { className: 'w-3 h-3 bg-yellow-300 border border-current' }), ' Tarde'),
+                      h('span', { className: 'flex items-center gap-1' }, h('div', { className: 'w-3 h-3 bg-cyan-400 border border-current' }), ' Partido'),
+                      h('span', { className: 'flex items-center gap-1' }, h('div', { className: 'w-3 h-3 bg-purple-600 border border-current' }), ' Noche'),
+                      h('span', { className: 'flex items-center gap-1' }, h('div', { className: 'w-3 h-3 bg-blue-800 border border-current' }), ' Vacaciones'),
+                      h('span', { className: 'flex items-center gap-1' }, h('div', { className: 'w-3 h-3 bg-slate-400 border border-current' }), ' Baja')
+                    )
+                  )
+                )
+              )
+            );
+          }
+
+          return null;
+        }
+
+        ReactDOM.render(h(App), document.getElementById('root'));
+    </script>
+</body>
+</html>
