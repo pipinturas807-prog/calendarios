@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Botiquín — Control de medicación</title>
+
+<!-- ============================================================
+     CONFIGURACIÓN NECESARIA ANTES DE PUBLICAR:
+     1) Crea un proyecto en https://console.firebase.google.com
+     2) Activa "Firestore Database" (modo producción) y
+        "Authentication" → método "Anónimo" (Anonymous). Esto NO pide
+        correo ni contraseña: la app inicia sesión anónima sola, en
+        segundo plano, solo para poder aplicar reglas de Firestore.
+     3) Copia la configuración del proyecto (Project settings →
+        General → "SDK setup and configuration") y pégala abajo en
+        firebaseConfig.
+     4) En Firestore → Rules, pega esto:
+
+        rules_version = '2';
+        service cloud.firestore {
+          match /databases/{database}/documents {
+            match /{document=**} {
+              allow read, write: if request.auth != null;
+            }
+          }
+        }
+
+        AVISO IMPORTANTE: la autenticación anónima no protege tus
+        datos de otras personas — cualquiera que abra la página
+        también inicia sesión anónima y podría leer o escribir en tu
+        Firestore si averigua tu firebaseConfig (que queda visible en
+        el código fuente, al ser una web pública). Si quieres que
+        SOLO tú puedas ver o cambiar tu medicación, dímelo y te
+        preparo una versión con contraseña o con acceso restringido.
+     5) Sube este archivo a tu repositorio de GitHub (por ejemplo
+        como index.html) y activa GitHub Pages.
+     ============================================================ -->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --bg: #F1F4EC;
+    --surface: #FFFFFF;
+    --surface-alt: #FBFAF4;
+    --ink: #202B23;
+    --ink-soft: #5B665D;
+    --line: #DBD9C9;
+    --taken: #3F6B52;
+    --taken-bg: #E3EEE6;
+    --pending: #B97D24;
+    --pending-bg: #FBF0DA;
+    --danger: #A24A3C;
+    --font-display: 'Fraunces', serif;
+    --font-body: 'Inter', sans-serif;
+    --radius: 14px;
+  }
+
+  *{ box-sizing: border-box; }
+
+  html, body{
+    margin:0;
+    padding:0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body{
+    min-height: 100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+
+  .hidden{ display:none !important; }
+
+  label{
+    display:block;
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+    margin: 14px 0 6px;
+  }
+
+  input[type=email], input[type=password], input[type=text]{
+    width:100%;
+    padding: 11px 12px;
+    border:1px solid var(--line);
+    border-radius: 9px;
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    background: var(--surface-alt);
+    color: var(--ink);
+  }
+
+  input:focus{
+    outline: 2px solid var(--taken);
+    outline-offset: 1px;
+  }
+
+  button{
+    font-family: var(--font-body);
+    cursor:pointer;
+    border:none;
+  }
+
+  .btn-primary{
+    width:100%;
+    margin-top: 22px;
+    padding: 12px 16px;
+    background: var(--ink);
+    color: var(--bg);
+    border-radius: 9px;
+    font-weight:600;
+    font-size: 0.95rem;
+  }
+
+  .btn-primary:hover{ background:#0F1712; }
+
+  /* ---------- App shell ---------- */
+  #app{
+    width:100%;
+    max-width: 560px;
+    padding: 28px 18px 60px;
+  }
+
+  header.top{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    margin-bottom: 22px;
+  }
+
+  header.top h1{
+    font-family: var(--font-display);
+    font-weight:500;
+    font-size: 1.6rem;
+    margin:0;
+  }
+
+  header.top p{
+    margin: 2px 0 0;
+    color: var(--ink-soft);
+    font-size: 0.85rem;
+  }
+
+  nav.tabs{
+    display:flex;
+    gap: 22px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 22px;
+  }
+
+  nav.tabs button{
+    background:none;
+    padding: 8px 0 12px;
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+
+  nav.tabs button.active{
+    color: var(--ink);
+    border-bottom-color: var(--taken);
+    font-weight:600;
+  }
+
+  /* ---------- Date header ---------- */
+  .date-bar{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap: 14px;
+    margin-bottom: 22px;
+  }
+
+  .date-bar button.nav-arrow{
+    background: var(--surface);
+    border:1px solid var(--line);
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+
+  .date-bar .date-label{
+    text-align:center;
+    min-width: 190px;
+  }
+
+  .date-bar .date-label .weekday{
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 1.25rem;
+  }
+
+  .date-bar .date-label .full{
+    display:block;
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    margin-top: 1px;
+  }
+
+  .today-jump{
+    display:block;
+    margin: -14px auto 22px;
+    text-align:center;
+    background:none;
+    color: var(--taken);
+    font-size: 0.8rem;
+    text-decoration: underline;
+  }
+
+  /* ---------- Slot sections ---------- */
+  .slot-section{
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    margin-bottom: 16px;
+    overflow:hidden;
+  }
+
+  .slot-head{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding: 14px 16px 10px;
+  }
+
+  .slot-head svg{ flex-shrink:0; }
+
+  .slot-head h2{
+    font-family: var(--font-display);
+    font-weight:500;
+    font-style: italic;
+    font-size: 1.05rem;
+    margin:0;
+  }
+
+  .slot-empty{
+    padding: 4px 16px 16px;
+    color: var(--ink-soft);
+    font-size: 0.85rem;
+  }
+
+  .med-row{
+    display:flex;
+    align-items:center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-top: 1px solid var(--line);
+  }
+
+  .med-info{ flex:1; min-width:0; }
+
+  .med-name{
+    font-weight:600;
+    font-size: 0.95rem;
+  }
+
+  .med-dose{
+    color: var(--ink-soft);
+    font-size: 0.8rem;
+    margin-top:1px;
+  }
+
+  .take-toggle{
+    flex-shrink:0;
+    padding: 7px 14px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight:600;
+    background: var(--pending-bg);
+    color: var(--pending);
+    border: 1px solid transparent;
+    transition: background .15s ease, color .15s ease;
+  }
+
+  .take-toggle.done{
+    background: var(--taken-bg);
+    color: var(--taken);
+  }
+
+  /* ---------- Medication config view ---------- */
+  .med-card{
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 12px;
+  }
+
+  .med-card-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap: 10px;
+  }
+
+  .med-tags{
+    display:flex;
+    flex-wrap:wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .med-tag{
+    font-size: 0.72rem;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--surface-alt);
+    border: 1px solid var(--line);
+    color: var(--ink-soft);
+  }
+
+  .icon-btn{
+    background:none;
+    color: var(--ink-soft);
+    padding: 4px;
+    border-radius: 6px;
+  }
+
+  .icon-btn:hover{ background: var(--surface-alt); }
+
+  .icon-btn.danger:hover{ color: var(--danger); }
+
+  #meds-empty{
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+    padding: 6px 2px 18px;
+  }
+
+  form#med-form{
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px 16px 20px;
+    margin-top: 6px;
+  }
+
+  form#med-form h3{
+    font-family: var(--font-display);
+    font-weight:500;
+    font-size: 1.05rem;
+    margin: 0 0 2px;
+  }
+
+  .slot-checks{
+    display:flex;
+    flex-wrap:wrap;
+    gap: 8px;
+    margin-top: 6px;
+  }
+
+  .slot-check{
+    position:relative;
+  }
+
+  .slot-check input{
+    position:absolute;
+    opacity:0;
+    width:100%;
+    height:100%;
+    margin:0;
+    cursor:pointer;
+  }
+
+  .slot-check span{
+    display:inline-block;
+    padding: 7px 13px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+    background: var(--surface-alt);
+  }
+
+  .slot-check input:checked + span{
+    background: var(--ink);
+    color: var(--bg);
+    border-color: var(--ink);
+  }
+
+  .form-actions{
+    display:flex;
+    gap: 10px;
+    margin-top: 20px;
+  }
+
+  .btn-secondary{
+    background: var(--surface-alt);
+    color: var(--ink-soft);
+    padding: 10px 16px;
+    border-radius: 9px;
+    font-size: 0.88rem;
+    border: 1px solid var(--line);
+  }
+
+  .btn-save{
+    background: var(--ink);
+    color: var(--bg);
+    padding: 10px 18px;
+    border-radius: 9px;
+    font-size: 0.88rem;
+    font-weight:600;
+  }
+
+  #form-error{
+    color: var(--danger);
+    font-size: 0.82rem;
+    margin-top: 10px;
+    min-height: 1em;
+  }
+
+  @media (max-width: 420px){
+    #app{ padding: 20px 12px 50px; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- ======================= APP ======================= -->
+  <div id="app" class="hidden">
+    <header class="top">
+      <div>
+        <h1>Botiquín</h1>
+        <p>Tu control diario de medicación</p>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <button id="tab-today" class="active">Hoy</button>
+      <button id="tab-meds">Medicación</button>
+    </nav>
+
+    <!-- ---- Vista de hoy ---- -->
+    <section id="view-today">
+      <div class="date-bar">
+        <button class="nav-arrow" id="prev-day" aria-label="Día anterior">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="date-label">
+          <span class="weekday" id="date-weekday">—</span>
+          <span class="full" id="date-full">—</span>
+        </div>
+        <button class="nav-arrow" id="next-day" aria-label="Día siguiente">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <button class="today-jump hidden" id="jump-today">Volver a hoy</button>
+
+      <div id="slots-container"><!-- se rellena por JS --></div>
+    </section>
+
+    <!-- ---- Vista de medicación ---- -->
+    <section id="view-meds" class="hidden">
+      <div id="meds-list"></div>
+      <p id="meds-empty" class="hidden">Todavía no has añadido ninguna medicación.</p>
+
+      <form id="med-form">
+        <h3 id="form-title">Añadir medicación</h3>
+        <input type="hidden" id="med-id">
+
+        <label for="med-name">Nombre</label>
+        <input type="text" id="med-name" placeholder="p. ej. Ibuprofeno" required>
+
+        <label for="med-dose">Dosis (opcional)</label>
+        <input type="text" id="med-dose" placeholder="p. ej. 400 mg">
+
+        <label>Franjas en las que se toma</label>
+        <div class="slot-checks">
+          <label class="slot-check"><input type="checkbox" value="manana"><span>Mañana</span></label>
+          <label class="slot-check"><input type="checkbox" value="mediodia"><span>Mediodía</span></label>
+          <label class="slot-check"><input type="checkbox" value="tarde"><span>Tarde</span></label>
+          <label class="slot-check"><input type="checkbox" value="noche"><span>Noche</span></label>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn-secondary hidden" id="cancel-edit">Cancelar</button>
+          <button type="submit" class="btn-save" id="save-med-btn">Guardar medicación</button>
+        </div>
+        <p id="form-error"></p>
+      </form>
+    </section>
+  </div>
+
+  <!-- ======================= FIREBASE ======================= -->
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+
+  <script>
+  // =====================================================
+  // 1) PEGA AQUÍ LA CONFIGURACIÓN DE TU PROYECTO FIREBASE
+  // =====================================================
+  const firebaseConfig = {
+    apiKey: "TU_API_KEY",
+    authDomain: "TU_PROYECTO.firebaseapp.com",
+    projectId: "TU_PROYECTO",
+    storageBucket: "TU_PROYECTO.appspot.com",
+    messagingSenderId: "TU_SENDER_ID",
+    appId: "TU_APP_ID"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+
+  // ---------- Definición de franjas ----------
+  const SLOTS = [
+    { id: 'manana',   label: 'Mañana',   icon: iconSun() },
+    { id: 'mediodia', label: 'Mediodía', icon: iconSunHigh() },
+    { id: 'tarde',    label: 'Tarde',    icon: iconSunset() },
+    { id: 'noche',    label: 'Noche',    icon: iconMoon() },
+  ];
+
+  function iconSun(){
+    return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4" stroke="#B97D24" stroke-width="1.6"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="#B97D24" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  }
+  function iconSunHigh(){
+    return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="9" r="4" stroke="#3F6B52" stroke-width="1.6"/><path d="M12 1v2M4 9H2M22 9h-2M5.6 3.6l1.4 1.4M18.4 3.6L17 5" stroke="#3F6B52" stroke-width="1.6" stroke-linecap="round"/><path d="M4 20h16" stroke="#3F6B52" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  }
+  function iconSunset(){
+    return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 15a8 8 0 0116 0" stroke="#A2622F" stroke-width="1.6"/><path d="M2 15h20M12 3v6M8 6l2.5 3M16 6l-2.5 3" stroke="#A2622F" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  }
+  function iconMoon(){
+    return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M20 14.5A8.5 8.5 0 1110.5 4a6.8 6.8 0 009.5 10.5z" stroke="#3A4A6B" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+  }
+
+  // ---------- Estado ----------
+  let medications = [];      // [{id, name, dose, slots:{manana:bool,...}}]
+  let currentLog = {};       // datos del día visible
+  let selectedDate = new Date();
+  let unsubMeds = null;
+  let unsubLog = null;
+  let editingId = null;
+
+  const pad = n => String(n).padStart(2, '0');
+  const isoDate = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const isToday = d => isoDate(d) === isoDate(new Date());
+
+  const WEEKDAYS = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  const MONTHS = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+  // =====================================================
+  // AUTENTICACIÓN (anónima, automática, sin formulario)
+  // =====================================================
+  const appRoot = document.getElementById('app');
+
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      appRoot.classList.remove('hidden');
+      startListeners();
+    } else {
+      if (unsubMeds) unsubMeds();
+      if (unsubLog) unsubLog();
+      auth.signInAnonymously().catch(err => {
+        console.error('Fallo al iniciar sesión anónima:', err);
+        alert('No se ha podido conectar con Firebase. Revisa la configuración (firebaseConfig) y que la autenticación anónima esté activada.');
+      });
+    }
+  });
+
+  function startListeners(){
+    unsubMeds = db.collection('medications').orderBy('createdAt', 'asc')
+      .onSnapshot(snap => {
+        medications = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderMedsList();
+        renderToday();
+      }, err => console.error(err));
+    watchLogForDate();
+  }
+
+  // =====================================================
+  // PESTAÑAS
+  // =====================================================
+  const tabToday = document.getElementById('tab-today');
+  const tabMeds = document.getElementById('tab-meds');
+  const viewToday = document.getElementById('view-today');
+  const viewMeds = document.getElementById('view-meds');
+
+  tabToday.addEventListener('click', () => {
+    tabToday.classList.add('active');
+    tabMeds.classList.remove('active');
+    viewToday.classList.remove('hidden');
+    viewMeds.classList.add('hidden');
+  });
+  tabMeds.addEventListener('click', () => {
+    tabMeds.classList.add('active');
+    tabToday.classList.remove('active');
+    viewMeds.classList.remove('hidden');
+    viewToday.classList.add('hidden');
+  });
+
+  // =====================================================
+  // NAVEGACIÓN DE FECHA
+  // =====================================================
+  document.getElementById('prev-day').addEventListener('click', () => changeDay(-1));
+  document.getElementById('next-day').addEventListener('click', () => changeDay(1));
+  document.getElementById('jump-today').addEventListener('click', () => {
+    selectedDate = new Date();
+    watchLogForDate();
+  });
+
+  function changeDay(delta){
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + delta);
+    selectedDate = d;
+    watchLogForDate();
+  }
+
+  function watchLogForDate(){
+    renderDateHeader();
+    if (unsubLog) unsubLog();
+    const dateId = isoDate(selectedDate);
+    unsubLog = db.collection('logs').doc(dateId).onSnapshot(doc => {
+      currentLog = doc.exists ? doc.data() : {};
+      renderToday();
+    }, err => console.error(err));
+  }
+
+  function renderDateHeader(){
+    const wd = WEEKDAYS[selectedDate.getDay()];
+    const full = `${selectedDate.getDate()} de ${MONTHS[selectedDate.getMonth()]} de ${selectedDate.getFullYear()}`;
+    document.getElementById('date-weekday').textContent = wd.charAt(0).toUpperCase() + wd.slice(1);
+    document.getElementById('date-full').textContent = full;
+    document.getElementById('jump-today').classList.toggle('hidden', isToday(selectedDate));
+  }
+
+  // =====================================================
+  // VISTA "HOY"
+  // =====================================================
+  function renderToday(){
+    const container = document.getElementById('slots-container');
+    container.innerHTML = '';
+
+    SLOTS.forEach(slot => {
+      const medsInSlot = medications.filter(m => m.slots && m.slots[slot.id]);
+      const section = document.createElement('div');
+      section.className = 'slot-section';
+
+      const head = document.createElement('div');
+      head.className = 'slot-head';
+      head.innerHTML = `${slot.icon}<h2>${slot.label}</h2>`;
+      section.appendChild(head);
+
+      if (medsInSlot.length === 0) {
+        const empty = document.createElement('p');
+        empty.className = 'slot-empty';
+        empty.textContent = 'Sin medicación asignada a esta franja.';
+        section.appendChild(empty);
+      } else {
+        medsInSlot.forEach(med => {
+          const key = `${med.id}__${slot.id}`;
+          const done = !!currentLog[key];
+
+          const row = document.createElement('div');
+          row.className = 'med-row';
+          row.innerHTML = `
+            <div class="med-info">
+              <div class="med-name">${escapeHtml(med.name)}</div>
+              ${med.dose ? `<div class="med-dose">${escapeHtml(med.dose)}</div>` : ''}
+            </div>
+            <button class="take-toggle ${done ? 'done' : ''}" data-key="${key}">
+              ${done ? 'Tomado' : 'Marcar'}
+            </button>
+          `;
+          section.appendChild(row);
+        });
+      }
+
+      container.appendChild(section);
+    });
+
+    container.querySelectorAll('.take-toggle').forEach(btn => {
+      btn.addEventListener('click', () => toggleTaken(btn.dataset.key));
+    });
+  }
+
+  function toggleTaken(key){
+    const dateId = isoDate(selectedDate);
+    const newValue = !currentLog[key];
+    db.collection('logs').doc(dateId).set({ [key]: newValue }, { merge: true })
+      .catch(err => console.error(err));
+  }
+
+  // =====================================================
+  // VISTA "MEDICACIÓN" (configuración)
+  // =====================================================
+  function renderMedsList(){
+    const list = document.getElementById('meds-list');
+    const emptyMsg = document.getElementById('meds-empty');
+    list.innerHTML = '';
+
+    emptyMsg.classList.toggle('hidden', medications.length > 0);
+
+    medications.forEach(med => {
+      const activeSlots = SLOTS.filter(s => med.slots && med.slots[s.id]);
+      const card = document.createElement('div');
+      card.className = 'med-card';
+      card.innerHTML = `
+        <div class="med-card-top">
+          <div>
+            <div class="med-name">${escapeHtml(med.name)}</div>
+            ${med.dose ? `<div class="med-dose">${escapeHtml(med.dose)}</div>` : ''}
+          </div>
+          <div style="display:flex; gap:2px;">
+            <button class="icon-btn" data-edit="${med.id}" aria-label="Editar">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button class="icon-btn danger" data-delete="${med.id}" aria-label="Eliminar">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="med-tags">
+          ${activeSlots.length
+            ? activeSlots.map(s => `<span class="med-tag">${s.label}</span>`).join('')
+            : '<span class="med-tag">Sin franja asignada</span>'}
+        </div>
+      `;
+      list.appendChild(card);
+    });
+
+    list.querySelectorAll('[data-edit]').forEach(btn => {
+      btn.addEventListener('click', () => startEdit(btn.dataset.edit));
+    });
+    list.querySelectorAll('[data-delete]').forEach(btn => {
+      btn.addEventListener('click', () => deleteMed(btn.dataset.delete));
+    });
+  }
+
+  function startEdit(id){
+    const med = medications.find(m => m.id === id);
+    if (!med) return;
+    editingId = id;
+    document.getElementById('form-title').textContent = 'Editar medicación';
+    document.getElementById('med-id').value = id;
+    document.getElementById('med-name').value = med.name || '';
+    document.getElementById('med-dose').value = med.dose || '';
+    document.querySelectorAll('.slot-check input').forEach(cb => {
+      cb.checked = !!(med.slots && med.slots[cb.value]);
+    });
+    document.getElementById('save-med-btn').textContent = 'Guardar cambios';
+    document.getElementById('cancel-edit').classList.remove('hidden');
+    document.getElementById('med-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function resetForm(){
+    editingId = null;
+    document.getElementById('med-form').reset();
+    document.getElementById('med-id').value = '';
+    document.getElementById('form-title').textContent = 'Añadir medicación';
+    document.getElementById('save-med-btn').textContent = 'Guardar medicación';
+    document.getElementById('cancel-edit').classList.add('hidden');
+    document.getElementById('form-error').textContent = '';
+  }
+
+  document.getElementById('cancel-edit').addEventListener('click', resetForm);
+
+  document.getElementById('med-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('med-name').value.trim();
+    const dose = document.getElementById('med-dose').value.trim();
+    const errEl = document.getElementById('form-error');
+    errEl.textContent = '';
+
+    const slots = {};
+    let anySlot = false;
+    document.querySelectorAll('.slot-check input').forEach(cb => {
+      slots[cb.value] = cb.checked;
+      if (cb.checked) anySlot = true;
+    });
+
+    if (!name){
+      errEl.textContent = 'Ponle un nombre a la medicación.';
+      return;
+    }
+    if (!anySlot){
+      errEl.textContent = 'Elige al menos una franja horaria.';
+      return;
+    }
+
+    try {
+      if (editingId){
+        await db.collection('medications').doc(editingId).update({ name, dose, slots });
+      } else {
+        await db.collection('medications').add({
+          name, dose, slots,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }
+      resetForm();
+    } catch (err){
+      console.error(err);
+      errEl.textContent = 'No se ha podido guardar. Inténtalo de nuevo.';
+    }
+  });
+
+  async function deleteMed(id){
+    if (!confirm('¿Eliminar esta medicación? También desaparecerá de "Hoy".')) return;
+    try {
+      await db.collection('medications').doc(id).delete();
+      if (editingId === id) resetForm();
+    } catch (err){
+      console.error(err);
+      alert('No se ha podido eliminar.');
+    }
+  }
+
+  // =====================================================
+  // UTILIDADES
+  // =====================================================
+  function escapeHtml(str){
+    return String(str)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;');
+  }
+
+  renderDateHeader();
+  </script>
+</body>
+</html>
